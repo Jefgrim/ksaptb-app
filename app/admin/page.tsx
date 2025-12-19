@@ -3,7 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,12 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Id } from "@/convex/_generated/dataModel";
+import { useUser } from "@clerk/nextjs";
 
 export default function AdminDashboard() {
   const router = useRouter();
 
   // 1. Data Fetching
   const bookings = useQuery(api.bookings.getAllBookings);
+  const { isLoaded, isSignedIn } = useUser(); // Clerk hook
   const user = useQuery(api.users.current);
 
   // Mutations
@@ -24,14 +26,24 @@ export default function AdminDashboard() {
   const createTour = useMutation(api.tours.create);
   const cancelBooking = useMutation(api.bookings.cancelBooking);
 
-  // 2. Security Redirect
-  useEffect(() => {
-    if (user !== undefined) {
-      if (!user || user.role !== "admin") {
-        router.push("/");
-      }
-    }
-  }, [user, router]);
+  // 2. If not signed in, the Middleware should have caught this, 
+  // but as a fallback, we redirect.
+  if (!isSignedIn) {
+    return null;
+  }
+
+  // 3. Wait for Convex User Data
+  if (user === undefined) {
+    return <div className="p-10 text-center">Verifying admin privileges...</div>;
+  }
+
+  // 4. CHECK ROLE: If logged in but NOT admin
+  if (user === null || user.role !== "admin") {
+    // Redirect immediately
+    router.replace("/");
+    // Return null so the rest of the page (Admin Dashboard) NEVER renders
+    return null;
+  }
 
   // Form State
   const imageInput = useRef<HTMLInputElement>(null);

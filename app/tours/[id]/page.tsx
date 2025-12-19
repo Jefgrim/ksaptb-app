@@ -5,7 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useParams } from "next/navigation"; 
+import { useParams } from "next/navigation";
 import {
   Carousel,
   CarouselContent,
@@ -13,6 +13,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import router from "next/router";
 
 export default function TourDetail() {
   const params = useParams();
@@ -22,8 +23,22 @@ export default function TourDetail() {
   const tour = useQuery(api.tours.get, tourId ? { id: tourId } : "skip");
   const bookTour = useMutation(api.tours.book); // <--- MOVED UP (Fixes the crash)
 
+  if (tour === undefined) {
+    return <div className="p-10 text-center">Loading details...</div>;
+  }
+
+  if (tour === null) {
+    return (
+      <div className="container mx-auto p-10 text-center">
+        <h1 className="text-2xl font-bold mb-4">Tour Not Found</h1>
+        <p className="text-gray-600 mb-6">The tour you are looking for does not exist or has been removed.</p>
+        <Button onClick={() => router.push("/")}>Return Home</Button>
+      </div>
+    );
+  }
+
   const handleBook = async () => {
-    if (!tourId) return; 
+    if (!tourId) return;
     try {
       await bookTour({ tourId });
       toast.success("Tour booked successfully!");
@@ -53,8 +68,8 @@ export default function TourDetail() {
             <CarouselContent>
               {allImages.map((url, index) => (
                 <CarouselItem key={index} className="h-64 md:h-96 relative">
-                  <img 
-                    src={url} 
+                  <img
+                    src={url}
                     alt={`Gallery image ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
                   />
@@ -83,8 +98,8 @@ export default function TourDetail() {
           <p><strong>Availability:</strong> {tour.capacity - tour.bookedCount} / {tour.capacity}</p>
         </div>
 
-        <Button 
-          size="lg" 
+        <Button
+          size="lg"
           className="w-full"
           onClick={handleBook}
           disabled={tour.bookedCount >= tour.capacity}
