@@ -54,13 +54,14 @@ export function TourList() {
     try {
       await deleteTour({ id });
       toast.success("Tour deleted");
-    } catch (error) {
-      // Check if the backend sent a specific message (like "Active bookings exist")
-      const errorMessage = error instanceof ConvexError 
-        ? (error.data as string) 
-        : "Unexpected error occurred";
+    } catch (error: any) {
+      console.error("Delete Error:", error);
+      
+      const errorMessage = 
+        error instanceof ConvexError ? (error.data as string) : 
+        (error.data && typeof error.data === "string") ? error.data :
+        "Unexpected error occurred";
 
-      console.error(error);
       toast.error(errorMessage);
     }
   };
