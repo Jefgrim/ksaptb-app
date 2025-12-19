@@ -31,11 +31,22 @@ export const get = query({
     const tour = await ctx.db.get(args.id);
     if (!tour) return null;
 
+    // Resolve Cover Image URL
+    const coverUrl = tour.coverImageId
+      ? await ctx.storage.getUrl(tour.coverImageId)
+      : null;
+
+    // Resolve Gallery Image URLs (concurrently for speed)
+    const galleryUrls = tour.galleryImageIds
+      ? await Promise.all(
+        tour.galleryImageIds.map((id) => ctx.storage.getUrl(id))
+      )
+      : [];
+
     return {
       ...tour,
-      imageUrl: tour.coverImageId
-        ? await ctx.storage.getUrl(tour.coverImageId)
-        : null,
+      imageUrl: coverUrl, // Keep backward compatibility for homepage
+      galleryUrls: galleryUrls.filter(url => url !== null), // Ensure no nulls
     };
   },
 });
@@ -49,6 +60,7 @@ export const create = mutation({
     startDate: v.number(),
     capacity: v.number(),
     coverImageId: v.optional(v.id("_storage")),
+    galleryImageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -59,6 +71,7 @@ export const create = mutation({
     return await ctx.db.insert("tours", {
       ...args,
       bookedCount: 0,
+      galleryImageIds: args.galleryImageIds || [],
     });
   },
 });

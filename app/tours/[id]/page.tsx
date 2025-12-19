@@ -6,6 +6,14 @@ import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useParams } from "next/navigation"; // <--- 1. Import this
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import Image from "next/image";
 
 export default function TourDetail() {
   // 2. Use the hook instead of props
@@ -16,6 +24,13 @@ export default function TourDetail() {
 
   // 4. CONDITIONAL FETCH: If tourId is missing, pass "skip" to prevent the crash
   const tour = useQuery(api.tours.get, tourId ? { id: tourId } : "skip");
+
+  if (!tour) return <div className="p-10 text-center">Loading...</div>;
+
+  const allImages = [
+    ...(tour.imageUrl ? [tour.imageUrl] : []),
+    ...(tour.galleryUrls || []),
+  ];
 
   const bookTour = useMutation(api.tours.book);
 
@@ -38,14 +53,32 @@ export default function TourDetail() {
     <div className="container mx-auto p-10">
       <div className="max-w-2xl mx-auto border p-6 rounded-lg shadow-sm bg-white">
 
-        {/* IMAGE HERO */}
-        {tour.imageUrl && (
-          <div className="mb-6 rounded-lg overflow-hidden h-64 w-full">
-            <img
-              src={tour.imageUrl}
-              alt={tour.title}
-              className="w-full h-full object-cover"
-            />
+        {/* CAROUSEL BLOCK */}
+        {allImages.length > 0 ? (
+          <Carousel className="w-full mb-6">
+            <CarouselContent>
+              {allImages.map((url, index) => (
+                <CarouselItem key={index} className="h-64 md:h-96 relative">
+                  {/* Using standard img tag for simplicity, can use Next/Image later */}
+                  <img
+                    src={url}
+                    alt={`Gallery image ${index + 1}`}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            {allImages.length > 1 && (
+              <>
+                <CarouselPrevious className="left-2" />
+                <CarouselNext className="right-2" />
+              </>
+            )}
+          </Carousel>
+        ) : (
+          // Fallback if no images at all
+          <div className="h-64 mb-6 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+            No images available
           </div>
         )}
 

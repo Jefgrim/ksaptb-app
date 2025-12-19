@@ -17,6 +17,7 @@ export default defineSchema({
     capacity: v.number(),
     bookedCount: v.number(),
     coverImageId: v.optional(v.id("_storage")),
+    galleryImageIds: v.optional(v.array(v.id("_storage"))),
   }),
 
   bookings: defineTable({

@@ -8,33 +8,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input"; 
-import { Button } from "@/components/ui/button"; 
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Id } from "@/convex/_generated/dataModel";
 
 export default function AdminDashboard() {
   const router = useRouter();
-  
+
   // 1. Data Fetching
   const bookings = useQuery(api.bookings.getAllBookings);
   const user = useQuery(api.users.current);
-  
+
   // Mutations
   const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
   const createTour = useMutation(api.tours.create);
 
   // 2. Security Redirect
   useEffect(() => {
-    if (user !== undefined) { 
+    if (user !== undefined) {
       if (!user || user.role !== "admin") {
-        router.push("/"); 
+        router.push("/");
       }
     }
   }, [user, router]);
 
   // Form State
   const imageInput = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10 });
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10, date: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 3. Early return for loading/security
@@ -42,48 +43,60 @@ export default function AdminDashboard() {
     return <div className="p-10 text-center">Verifying permissions...</div>;
   }
 
+  // Helper function to upload a single file
+  const uploadFile = async (file: File) => {
+    const postUrl = await generateUploadUrl();
+    const result = await fetch(postUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!result.ok) throw new Error("Upload failed");
+    const { storageId } = await result.json();
+    return storageId as Id<"_storage">;
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // 1. Handle Image Upload
+      // 1. Handle Cover Image Upload
       let coverImageId: Id<"_storage"> | undefined = undefined;
-      const file = imageInput.current?.files?.[0];
-
-      if (file) {
-        // Step A: Get secure URL
-        const postUrl = await generateUploadUrl();
-        // Step B: Upload file
-        const result = await fetch(postUrl, {
-          method: "POST",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
-        if (!result.ok) throw new Error("Upload failed");
-        // Step C: Get ID
-        const { storageId } = await result.json();
-        coverImageId = storageId;
+      const coverFile = imageInput.current?.files?.[0];
+      if (coverFile) {
+        coverImageId = await uploadFile(coverFile);
       }
 
-      // 2. Save Tour
+      // 2. Handle Gallery Images Upload (Loop through files)
+      const galleryImageIds: Id<"_storage">[] = [];
+      const galleryFiles = galleryInput.current?.files;
+      if (galleryFiles && galleryFiles.length > 0) {
+        // Upload all files concurrently
+        const uploadPromises = Array.from(galleryFiles).map(uploadFile);
+        const results = await Promise.all(uploadPromises);
+        galleryImageIds.push(...results);
+      }
+
+      // 3. Save Tour to Database
       await createTour({
         ...form,
-        price: Number(form.price) * 100, // Store as cents
+        price: Number(form.price) * 100,
         capacity: Number(form.capacity),
-        startDate: Date.now(),
-        coverImageId, 
+        startDate: form.date ? new Date(form.date).getTime() : Date.now(),
+        coverImageId,
+        galleryImageIds, // Pass the array
       });
 
       alert("Tour Created Successfully!");
-      
-      // Reset
-      setForm({ title: "", description: "", price: 0, capacity: 10 });
+      // Reset Form & Inputs
+      setForm({ title: "", description: "", price: 0, capacity: 10, date: "" });
       if (imageInput.current) imageInput.current.value = "";
+      if (galleryInput.current) galleryInput.current.value = "";
 
     } catch (error) {
       console.error(error);
-      alert("Failed to create tour");
+      alert("Failed to create tour. See console.");
     } finally {
       setIsSubmitting(false);
     }
@@ -145,10 +158,10 @@ export default function AdminDashboard() {
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="grid gap-2">
                   <label>Title</label>
-                  <Input 
+                  <Input
                     value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })} 
-                    required 
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    required
                   />
                 </div>
 
@@ -162,31 +175,42 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                {/* NEW GALLERY INPUT */}
+                <div className="grid gap-2">
+                  <label>Gallery Images (Select Multiple)</label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    multiple  // <-- Crucial attribute
+                    ref={galleryInput}
+                  />
+                </div>
+
                 <div className="grid gap-2">
                   <label>Description</label>
-                  <Input 
+                  <Input
                     value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })} 
-                    required 
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label>Price (USD)</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       value={form.price}
-                      onChange={(e) => setForm({ ...form, price: +e.target.value })} 
-                      required 
+                      onChange={(e) => setForm({ ...form, price: +e.target.value })}
+                      required
                     />
                   </div>
                   <div>
                     <label>Capacity</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       value={form.capacity}
-                      onChange={(e) => setForm({ ...form, capacity: +e.target.value })} 
-                      required 
+                      onChange={(e) => setForm({ ...form, capacity: +e.target.value })}
+                      required
                     />
                   </div>
                 </div>
