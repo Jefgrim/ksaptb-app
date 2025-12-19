@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
+import { requireAdmin, requireUser } from "./auth"; // Import our new helpers
 
 
 // 1. Helper to generate a URL for uploading files
@@ -63,8 +64,8 @@ export const create = mutation({
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    // ONE LINE SECURITY CHECK
+    await requireAdmin(ctx);
 
     // In a real app, verify user.role === 'admin' here using a helper
 
@@ -80,23 +81,16 @@ export const create = mutation({
 export const book = mutation({
   args: { tourId: v.id("tours") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Please log in");
 
-    // Get the internal User ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.subject))
-      .unique();
-
-    if (!user) throw new Error("User not found in DB");
+    // Verify User
+    const user = await requireUser(ctx);
 
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
 
     // RACE CONDITION CHECK
     if (tour.bookedCount >= tour.capacity) {
-      throw new Error("Tour is sold out");
+      throw new ConvexError("Sorry, this tour is sold out.");
     }
 
     // Create Booking
