@@ -106,3 +106,20 @@ export const book = mutation({
     });
   },
 });
+
+// ... existing code ...
+
+// 5. ADMIN: Delete Tour
+export const deleteTour = mutation({
+  args: { id: v.id("tours") },
+  handler: async (ctx, args) => {
+    // 1. Security Check
+    await requireAdmin(ctx);
+
+    // 2. Delete the tour doc
+    await ctx.db.delete(args.id);
+    
+    // Note: In a production app, you might also want to 
+    // delete the associated images from storage here to save space.
+  },
+});
