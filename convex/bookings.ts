@@ -71,6 +71,18 @@ export const cancelBooking = mutation({
 export const getAllBookings = query({
     handler: async (ctx) => {
         // Ideally check for admin role here again for security
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) throw new Error("Unauthorized");
+
+        const user = await ctx.db
+            .query("users")
+            .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.subject))
+            .unique();
+
+        // STRICT SECURITY CHECK
+        if (!user || user.role !== "admin") {
+            throw new Error("Access Denied");
+        }
 
         const bookings = await ctx.db.query("bookings").order("desc").collect();
 

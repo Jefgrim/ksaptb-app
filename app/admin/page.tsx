@@ -1,6 +1,8 @@
 "use client";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,22 +12,40 @@ import { Button } from "@/components/ui/button"; // Ensure you have this
 import { useState } from "react";
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const bookings = useQuery(api.bookings.getAllBookings);
   const createTour = useMutation(api.tours.create);
-  
+
+  // 1. Fetch User
+  const user = useQuery(api.users.current);
+
+  // 2. Effect: Redirect immediately if loaded and not admin
+  useEffect(() => {
+    if (user !== undefined) { // undefined means "still loading"
+      if (!user || user.role !== "admin") {
+        router.push("/"); // Kick them out to homepage
+      }
+    }
+  }, [user, router]);
+
+  // 3. While checking, show a loader (prevents flashing the admin content)
+  if (user === undefined || (user && user.role !== "admin")) {
+    return <div className="p-10 text-center">Verifying permissions...</div>;
+  }
+
   // Simple form state
   const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10 });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createTour({ ...form, price: Number(form.price)*100, capacity: Number(form.capacity), startDate: Date.now() });
+    await createTour({ ...form, price: Number(form.price) * 100, capacity: Number(form.capacity), startDate: Date.now() });
     alert("Tour Created");
   };
 
   return (
     <div className="container mx-auto p-10">
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
-      
+
       <Tabs defaultValue="bookings" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="bookings">All Bookings</TabsTrigger>
@@ -79,20 +99,20 @@ export default function AdminDashboard() {
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="grid gap-2">
                   <label>Title</label>
-                  <Input onChange={(e) => setForm({...form, title: e.target.value})} required />
+                  <Input onChange={(e) => setForm({ ...form, title: e.target.value })} required />
                 </div>
                 <div className="grid gap-2">
                   <label>Description</label>
-                  <Input onChange={(e) => setForm({...form, description: e.target.value})} required />
+                  <Input onChange={(e) => setForm({ ...form, description: e.target.value })} required />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label>Price (USD)</label>
-                    <Input type="number" onChange={(e) => setForm({...form, price: +e.target.value})} required />
+                    <Input type="number" onChange={(e) => setForm({ ...form, price: +e.target.value })} required />
                   </div>
                   <div>
                     <label>Capacity</label>
-                    <Input type="number" onChange={(e) => setForm({...form, capacity: +e.target.value})} required />
+                    <Input type="number" onChange={(e) => setForm({ ...form, capacity: +e.target.value })} required />
                   </div>
                 </div>
                 <Button type="submit">Publish Tour</Button>
