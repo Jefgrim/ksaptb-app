@@ -11,7 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-import { ConvexError } from "convex/values";
+
+// We don't rely solely on instanceof check anymore, but keep the import just in case
+import { ConvexError } from "convex/values"; 
 
 export function TourList() {
   const tours = useQuery(api.tours.list);
@@ -47,7 +49,7 @@ export function TourList() {
     return storageId as Id<"_storage">;
   };
 
-  // UPDATED DELETE HANDLER
+  // --- DELETE HANDLER ---
   const handleDelete = async (id: Id<"tours">) => {
     if (!confirm("Delete this tour permanently?")) return;
     
@@ -56,11 +58,16 @@ export function TourList() {
       toast.success("Tour deleted");
     } catch (error: any) {
       console.error("Delete Error:", error);
-      
-      const errorMessage = 
-        error instanceof ConvexError ? (error.data as string) : 
-        (error.data && typeof error.data === "string") ? error.data :
-        "Unexpected error occurred";
+
+      let errorMessage = "An unexpected error occurred";
+
+      if (error.data) {
+        errorMessage = error.data;
+      } else if (error.message) {
+        errorMessage = error.message.replace("Uncaught ConvexError: ", "");
+      } else {
+        errorMessage = String(error);
+      }
 
       toast.error(errorMessage);
     }
