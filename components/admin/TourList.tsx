@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
+import { ConvexError } from "convex/values";
 
 export function TourList() {
   const tours = useQuery(api.tours.list);
@@ -18,7 +19,7 @@ export function TourList() {
   // Mutations
   const deleteTour = useMutation(api.tours.deleteTour);
   const updateTour = useMutation(api.tours.update);
-  const generateUploadUrl = useMutation(api.tours.generateUploadUrl); // Needed for image uploads
+  const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
 
   // State
   const [editingId, setEditingId] = useState<Id<"tours"> | null>(null);
@@ -46,13 +47,21 @@ export function TourList() {
     return storageId as Id<"_storage">;
   };
 
+  // UPDATED DELETE HANDLER
   const handleDelete = async (id: Id<"tours">) => {
     if (!confirm("Delete this tour permanently?")) return;
+    
     try {
       await deleteTour({ id });
       toast.success("Tour deleted");
     } catch (error) {
-      toast.error("Failed to delete");
+      // Check if the backend sent a specific message (like "Active bookings exist")
+      const errorMessage = error instanceof ConvexError 
+        ? (error.data as string) 
+        : "Unexpected error occurred";
+
+      console.error(error);
+      toast.error(errorMessage);
     }
   };
 
@@ -73,14 +82,13 @@ export function TourList() {
     setIsSubmitting(true);
 
     try {
-      // 1. Handle Cover Image (Only upload if user picked a new one)
+      // 1. Handle Cover Image
       let newCoverImageId: Id<"_storage"> | undefined = undefined;
       if (imageInput.current?.files?.[0]) {
         newCoverImageId = await uploadFile(imageInput.current.files[0]);
       }
 
-      // 2. Handle Gallery Images (Only upload if user picked new ones)
-      // Note: This replaces the entire gallery. Merging is harder (requires more UI).
+      // 2. Handle Gallery Images
       let newGalleryIds: Id<"_storage">[] | undefined = undefined;
       if (galleryInput.current?.files && galleryInput.current.files.length > 0) {
         newGalleryIds = await Promise.all(
@@ -88,7 +96,7 @@ export function TourList() {
         );
       }
 
-      // 3. Send Update to Backend
+      // 3. Send Update
       await updateTour({
         id: editingId,
         title: editForm.title,
@@ -96,7 +104,6 @@ export function TourList() {
         price: Number(editForm.price) * 100,
         capacity: Number(editForm.capacity),
         startDate: new Date(editForm.date).getTime(),
-        // Only include these if they are defined (meaning user uploaded something)
         ...(newCoverImageId && { coverImageId: newCoverImageId }),
         ...(newGalleryIds && { galleryImageIds: newGalleryIds }),
       });
@@ -147,7 +154,6 @@ export function TourList() {
                       <DialogHeader><DialogTitle>Edit Tour</DialogTitle></DialogHeader>
                       <form onSubmit={handleUpdate} className="space-y-4 mt-4">
                         
-                        {/* Text Fields */}
                         <div className="grid gap-2">
                           <Label>Title</Label>
                           <Input value={editForm.title} onChange={(e) => setEditForm({...editForm, title: e.target.value})} />
@@ -171,18 +177,15 @@ export function TourList() {
                           <Input value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} />
                         </div>
 
-                        {/* --- NEW: Image Inputs --- */}
+                        {/* Image Inputs */}
                         <div className="grid gap-2 p-3 bg-gray-50 rounded border">
                           <Label className="font-bold">Update Images</Label>
-                          
                           <div className="text-xs text-gray-500 mb-2">
                             Current Cover: {tour.coverImageId ? "✅ Set" : "❌ None"}
                           </div>
                           <Label className="text-xs">Replace Cover Image (Optional)</Label>
                           <Input type="file" accept="image/*" ref={imageInput} />
-
                           <div className="h-2"></div>
-
                           <Label className="text-xs">Replace Gallery (Optional)</Label>
                           <Input type="file" accept="image/*" multiple ref={galleryInput} />
                           <p className="text-[10px] text-gray-400">Uploading gallery images here will replace the entire existing gallery.</p>

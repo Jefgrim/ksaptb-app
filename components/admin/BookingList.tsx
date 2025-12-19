@@ -101,7 +101,7 @@ export function BookingList() {
               <TableRow>
                 <TableHead className="w-[80px]">Ref</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead className="w-[80px]">Guests</TableHead> {/* 👈 NEW COLUMN */}
+                <TableHead className="w-[80px]">Guests</TableHead>
                 <TableHead>Tour</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
