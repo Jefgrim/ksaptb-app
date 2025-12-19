@@ -118,8 +118,27 @@ export const deleteTour = mutation({
 
     // 2. Delete the tour doc
     await ctx.db.delete(args.id);
-    
+
     // Note: In a production app, you might also want to 
     // delete the associated images from storage here to save space.
+  },
+});
+
+// 6. ADMIN: Update Tour
+export const update = mutation({
+  args: {
+    id: v.id("tours"),
+    // All fields are optional because we might only change one
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    price: v.optional(v.number()),
+    capacity: v.optional(v.number()),
+    startDate: v.optional(v.number()),
+    // We won't touch images in this simple edit version to keep it stable
+  },
+  handler: async (ctx, args) => {
+    const { id, ...fields } = args;
+    await requireAdmin(ctx);
+    await ctx.db.patch(id, fields);
   },
 });
