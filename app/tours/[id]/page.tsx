@@ -3,9 +3,11 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { ConvexError } from "convex/values"; // Import this for better error handling
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation"; // Correct Router import
+import { useUser, SignInButton } from "@clerk/nextjs"; // Import Clerk hooks
 import {
   Carousel,
   CarouselContent,
@@ -13,20 +15,23 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import router from "next/router";
 
 export default function TourDetail() {
   const params = useParams();
+  const router = useRouter(); // Initialize router correctly
+  const { isLoaded, isSignedIn } = useUser(); // Get auth state
+
+  // 1. Data Hooks
   const tourId = params.id as Id<"tours">;
-
-  // 1. All Hooks must be at the top level
   const tour = useQuery(api.tours.get, tourId ? { id: tourId } : "skip");
-  const bookTour = useMutation(api.tours.book); // <--- MOVED UP (Fixes the crash)
+  const bookTour = useMutation(api.tours.book);
 
+  // 2. Loading State
   if (tour === undefined) {
     return <div className="p-10 text-center">Loading details...</div>;
   }
 
+  // 3. Not Found State (Deleted or Invalid ID)
   if (tour === null) {
     return (
       <div className="container mx-auto p-10 text-center">
@@ -37,20 +42,30 @@ export default function TourDetail() {
     );
   }
 
+  // 4. Handle Booking Logic
   const handleBook = async () => {
     if (!tourId) return;
+    
+    // Safety check (though the button should be hidden if not signed in)
+    if (!isSignedIn) {
+      toast.error("You must be logged in to book.");
+      return;
+    }
+
     try {
       await bookTour({ tourId });
-      toast.success("Tour booked successfully!");
+      toast.success("Tour booked successfully! Check 'My Bookings'.");
+      router.push("/my-bookings");
     } catch (error: any) {
-      toast.error(error.message);
+      // Graceful Error Handling
+      if (error instanceof ConvexError) {
+        toast.error(error.data); // e.g. "Tour is sold out"
+      } else {
+        console.error(error);
+        toast.error("Something went wrong. Please try again.");
+      }
     }
   };
-
-  // 2. NOW you can do conditional returns
-  if (!tour) {
-    return <div className="p-10 text-center">Loading details...</div>;
-  }
 
   // Combine images for the carousel
   const allImages = [
@@ -98,14 +113,30 @@ export default function TourDetail() {
           <p><strong>Availability:</strong> {tour.capacity - tour.bookedCount} / {tour.capacity}</p>
         </div>
 
-        <Button
-          size="lg"
-          className="w-full"
-          onClick={handleBook}
-          disabled={tour.bookedCount >= tour.capacity}
-        >
-          {tour.bookedCount >= tour.capacity ? "Sold Out" : "Book Now"}
-        </Button>
+        {/* 5. DYNAMIC ACTION BUTTON */}
+        <div className="mt-4">
+          {!isLoaded ? (
+            <Button disabled className="w-full">Loading...</Button>
+          ) : !isSignedIn ? (
+            // If Guest: Show "Log in to Book"
+            <SignInButton mode="modal">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                Log in to Book this Tour
+              </Button>
+            </SignInButton>
+          ) : (
+            // If User: Show "Book Now"
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={handleBook}
+              disabled={tour.bookedCount >= tour.capacity}
+            >
+              {tour.bookedCount >= tour.capacity ? "Sold Out" : "Book Now"}
+            </Button>
+          )}
+        </div>
+
       </div>
     </div>
   );
