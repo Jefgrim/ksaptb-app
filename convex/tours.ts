@@ -79,33 +79,35 @@ export const create = mutation({
 
 // 4. BOOK TOUR (Transaction Logic)
 export const book = mutation({
-  args: { 
+  args: {
     tourId: v.id("tours"),
-    ticketCount: v.number(), // <--- NEW ARGUMENT
+    ticketCount: v.number(),
   },
   handler: async (ctx, args) => {
-    // Verify User
     const user = await requireUser(ctx);
-
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
 
-    // NEW CHECK: Ensure enough capacity for the requested amount
     if (tour.bookedCount + args.ticketCount > tour.capacity) {
-      throw new ConvexError(`Not enough spots. Only ${tour.capacity - tour.bookedCount} left.`);
+      throw new ConvexError("Not enough spots left.");
     }
 
-    // Create Booking with ticket count
     await ctx.db.insert("bookings", {
       tourId: tour._id,
       userId: user._id,
       ticketCount: args.ticketCount,
       status: "confirmed",
+
+      // User Snapshots
       userName: user.name || "Anonymous",
       userEmail: user.email || "No Email",
+
+      // TOUR SNAPSHOTS
+      tourTitle: tour.title,
+      tourDate: tour.startDate,
+      tourPrice: tour.price,
     });
 
-    // Increment Tour Count by the number of tickets bought
     await ctx.db.patch(tour._id, {
       bookedCount: tour.bookedCount + args.ticketCount,
     });
@@ -119,6 +121,15 @@ export const deleteTour = mutation({
   args: { id: v.id("tours") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_tour", (q) => q.eq("tourId", args.id))
+      .collect();
+
+    if (bookings.length > 0) {
+      throw new ConvexError("Cannot delete this tour because it has existing bookings. Cancel them first.");
+    }
 
     // 1. Fetch the tour first so we know which images to delete
     const tour = await ctx.db.get(args.id);
@@ -174,7 +185,7 @@ export const update = mutation({
     // If a NEW gallery is provided, delete ALL old gallery images.
     if (fields.galleryImageIds && tour.galleryImageIds) {
       for (const oldImageId of tour.galleryImageIds) {
-         await ctx.storage.delete(oldImageId);
+        await ctx.storage.delete(oldImageId);
       }
     }
 

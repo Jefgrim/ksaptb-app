@@ -25,7 +25,10 @@ export default defineSchema({
     userId: v.id("users"),
     ticketCount: v.number(),
     status: v.string(), // "confirmed"
-    userName: v.string(), 
+    userName: v.string(),
     userEmail: v.string(),
+    tourTitle: v.string(),
+    tourDate: v.number(),
+    tourPrice: v.number(),
   }).index("by_tour", ["tourId"]).index("by_user", ["userId"]),
 });

@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { requireAdmin, requireUser } from "./auth"; 
+import { requireAdmin, requireUser } from "./auth";
 
 export const getMyBookings = query({
   handler: async (ctx) => {
@@ -23,7 +23,7 @@ export const getMyBookings = query({
     const bookingsWithTour = await Promise.all(
       bookings.map(async (booking) => {
         const tour = await ctx.db.get(booking.tourId);
-        
+
         // --- NEW CODE START ---
         let imageUrl = null;
         if (tour && tour.coverImageId) {
@@ -32,10 +32,10 @@ export const getMyBookings = query({
         }
         // --- NEW CODE END ---
 
-        return { 
-          ...booking, 
+        return {
+          ...booking,
           // We attach the new imageUrl to the tour object
-          tour: tour ? { ...tour, imageUrl } : null 
+          tour: tour ? { ...tour, imageUrl } : null
         };
       })
     );
@@ -78,22 +78,20 @@ export const cancelBooking = mutation({
 
 export const getAllBookings = query({
   handler: async (ctx) => {
-    // 1. Security Check
-    await requireAdmin(ctx);
-
     const bookings = await ctx.db.query("bookings").order("desc").collect();
 
-    return await Promise.all(
-      bookings.map(async (b) => {
-        const tour = await ctx.db.get(b.tourId);
-        const user = await ctx.db.get(b.userId);
-        return {
-          ...b,
-          tourTitle: tour?.title || "Unknown Tour",
-          userName: user?.name || user?.email || "Unknown User",
-          userEmail: user?.email,
-        };
-      })
-    );
+    return bookings.map((b) => ({
+      _id: b._id,
+      status: b.status,
+      ticketCount: b.ticketCount,
+
+      // Directly use the snapshots!
+      // Even if the User or Tour is deleted, this data remains.
+      userName: b.userName,
+      userEmail: b.userEmail,
+      tourTitle: b.tourTitle,
+      tourDate: b.tourDate,
+      totalPrice: (b.tourPrice * (b.ticketCount ?? 1)),
+    }));
   },
 });
