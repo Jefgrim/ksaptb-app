@@ -1,10 +1,26 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+
+// 1. Helper to generate a URL for uploading files
+export const generateUploadUrl = mutation(async (ctx) => {
+  return await ctx.storage.generateUploadUrl();
+});
+
 // 1. List all tours
 export const list = query({
   handler: async (ctx) => {
-    return await ctx.db.query("tours").collect();
+    const tours = await ctx.db.query("tours").collect();
+
+    // Convert Storage ID to a viewable URL for every tour
+    return await Promise.all(
+      tours.map(async (tour) => ({
+        ...tour,
+        imageUrl: tour.coverImageId
+          ? await ctx.storage.getUrl(tour.coverImageId)
+          : null,
+      }))
+    );
   },
 });
 
@@ -12,7 +28,15 @@ export const list = query({
 export const get = query({
   args: { id: v.id("tours") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const tour = await ctx.db.get(args.id);
+    if (!tour) return null;
+
+    return {
+      ...tour,
+      imageUrl: tour.coverImageId
+        ? await ctx.storage.getUrl(tour.coverImageId)
+        : null,
+    };
   },
 });
 
@@ -24,10 +48,11 @@ export const create = mutation({
     price: v.number(),
     startDate: v.number(),
     capacity: v.number(),
+    coverImageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if(!identity) throw new Error("Unauthorized");
+    if (!identity) throw new Error("Unauthorized");
 
     // In a real app, verify user.role === 'admin' here using a helper
 

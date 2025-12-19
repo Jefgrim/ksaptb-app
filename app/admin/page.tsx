@@ -1,45 +1,92 @@
 "use client";
+
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input"; // Ensure you have this
-import { Button } from "@/components/ui/button"; // Ensure you have this
-import { useState } from "react";
+import { Input } from "@/components/ui/input"; 
+import { Button } from "@/components/ui/button"; 
+import { Id } from "@/convex/_generated/dataModel";
 
 export default function AdminDashboard() {
   const router = useRouter();
+  
+  // 1. Data Fetching
   const bookings = useQuery(api.bookings.getAllBookings);
+  const user = useQuery(api.users.current);
+  
+  // Mutations
+  const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
   const createTour = useMutation(api.tours.create);
 
-  // 1. Fetch User
-  const user = useQuery(api.users.current);
-
-  // 2. Effect: Redirect immediately if loaded and not admin
+  // 2. Security Redirect
   useEffect(() => {
-    if (user !== undefined) { // undefined means "still loading"
+    if (user !== undefined) { 
       if (!user || user.role !== "admin") {
-        router.push("/"); // Kick them out to homepage
+        router.push("/"); 
       }
     }
   }, [user, router]);
 
-  // 3. While checking, show a loader (prevents flashing the admin content)
+  // Form State
+  const imageInput = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10 });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 3. Early return for loading/security
   if (user === undefined || (user && user.role !== "admin")) {
     return <div className="p-10 text-center">Verifying permissions...</div>;
   }
 
-  // Simple form state
-  const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10 });
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createTour({ ...form, price: Number(form.price) * 100, capacity: Number(form.capacity), startDate: Date.now() });
-    alert("Tour Created");
+    setIsSubmitting(true);
+
+    try {
+      // 1. Handle Image Upload
+      let coverImageId: Id<"_storage"> | undefined = undefined;
+      const file = imageInput.current?.files?.[0];
+
+      if (file) {
+        // Step A: Get secure URL
+        const postUrl = await generateUploadUrl();
+        // Step B: Upload file
+        const result = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!result.ok) throw new Error("Upload failed");
+        // Step C: Get ID
+        const { storageId } = await result.json();
+        coverImageId = storageId;
+      }
+
+      // 2. Save Tour
+      await createTour({
+        ...form,
+        price: Number(form.price) * 100, // Store as cents
+        capacity: Number(form.capacity),
+        startDate: Date.now(),
+        coverImageId, 
+      });
+
+      alert("Tour Created Successfully!");
+      
+      // Reset
+      setForm({ title: "", description: "", price: 0, capacity: 10 });
+      if (imageInput.current) imageInput.current.value = "";
+
+    } catch (error) {
+      console.error(error);
+      alert("Failed to create tour");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -80,7 +127,6 @@ export default function AdminDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {/* Admin can also cancel on behalf of users */}
                         <Button variant="ghost" size="sm">Manage</Button>
                       </TableCell>
                     </TableRow>
@@ -99,23 +145,54 @@ export default function AdminDashboard() {
               <form onSubmit={handleCreate} className="space-y-4">
                 <div className="grid gap-2">
                   <label>Title</label>
-                  <Input onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+                  <Input 
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })} 
+                    required 
+                  />
                 </div>
+
+                {/* IMAGE INPUT */}
+                <div className="grid gap-2">
+                  <label>Cover Image</label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    ref={imageInput}
+                  />
+                </div>
+
                 <div className="grid gap-2">
                   <label>Description</label>
-                  <Input onChange={(e) => setForm({ ...form, description: e.target.value })} required />
+                  <Input 
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })} 
+                    required 
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label>Price (USD)</label>
-                    <Input type="number" onChange={(e) => setForm({ ...form, price: +e.target.value })} required />
+                    <Input 
+                      type="number" 
+                      value={form.price}
+                      onChange={(e) => setForm({ ...form, price: +e.target.value })} 
+                      required 
+                    />
                   </div>
                   <div>
                     <label>Capacity</label>
-                    <Input type="number" onChange={(e) => setForm({ ...form, capacity: +e.target.value })} required />
+                    <Input 
+                      type="number" 
+                      value={form.capacity}
+                      onChange={(e) => setForm({ ...form, capacity: +e.target.value })} 
+                      required 
+                    />
                   </div>
                 </div>
-                <Button type="submit">Publish Tour</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Uploading..." : "Publish Tour"}
+                </Button>
               </form>
             </CardContent>
           </Card>

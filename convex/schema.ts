@@ -16,6 +16,7 @@ export default defineSchema({
     startDate: v.number(), // unix timestamp
     capacity: v.number(),
     bookedCount: v.number(),
+    coverImageId: v.optional(v.id("_storage")),
   }),
 
   bookings: defineTable({

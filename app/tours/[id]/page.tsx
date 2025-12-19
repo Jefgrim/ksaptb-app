@@ -10,13 +10,13 @@ import { useParams } from "next/navigation"; // <--- 1. Import this
 export default function TourDetail() {
   // 2. Use the hook instead of props
   const params = useParams();
-  
+
   // 3. Safely cast the ID (it might be undefined initially)
   const tourId = params.id as Id<"tours">;
 
   // 4. CONDITIONAL FETCH: If tourId is missing, pass "skip" to prevent the crash
   const tour = useQuery(api.tours.get, tourId ? { id: tourId } : "skip");
-  
+
   const bookTour = useMutation(api.tours.book);
 
   const handleBook = async () => {
@@ -37,6 +37,18 @@ export default function TourDetail() {
   return (
     <div className="container mx-auto p-10">
       <div className="max-w-2xl mx-auto border p-6 rounded-lg shadow-sm bg-white">
+
+        {/* IMAGE HERO */}
+        {tour.imageUrl && (
+          <div className="mb-6 rounded-lg overflow-hidden h-64 w-full">
+            <img
+              src={tour.imageUrl}
+              alt={tour.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+
         <h1 className="text-3xl font-bold mb-4">{tour.title}</h1>
         <p className="text-gray-700 mb-6">{tour.description}</p>
 
@@ -46,9 +58,9 @@ export default function TourDetail() {
           <p><strong>Availability:</strong> {tour.capacity - tour.bookedCount} / {tour.capacity}</p>
         </div>
 
-        <Button 
-          size="lg" 
-          className="w-full" 
+        <Button
+          size="lg"
+          className="w-full"
           onClick={handleBook}
           disabled={tour.bookedCount >= tour.capacity}
         >

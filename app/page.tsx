@@ -21,7 +21,19 @@ export default function Home() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {tours?.map((tour) => (
-          <Card key={tour._id}>
+          <Card key={tour._id} className="overflow-hidden">
+
+            {/* IMAGE DISPLAY */}
+            {tour.imageUrl && (
+              <div className="w-full h-48 relative">
+                <img
+                  src={tour.imageUrl}
+                  alt={tour.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
             <CardHeader>
               <CardTitle>{tour.title}</CardTitle>
             </CardHeader>
