@@ -3,7 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,45 +12,63 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Id } from "@/convex/_generated/dataModel";
 import { useUser } from "@clerk/nextjs";
+import { toast } from "sonner"; // Assuming you use sonner for alerts
 
 export default function AdminDashboard() {
   const router = useRouter();
-
-  // 1. Data Fetching
-  const bookings = useQuery(api.bookings.getAllBookings);
-  const { isLoaded, isSignedIn } = useUser(); // Clerk hook
+  const { isLoaded, isSignedIn } = useUser();
   const user = useQuery(api.users.current);
 
-  // Mutations
+  // 1. DATA FETCHING (With Security "Skip")
+  // Only fetch bookings if we are sure the user is an admin. 
+  // This prevents the "Access Denied" crash.
+  const shouldFetch = isLoaded && user?.role === "admin";
+  
+  const bookings = useQuery(
+    api.bookings.getAllBookings, 
+    shouldFetch ? undefined : "skip" 
+  );
+
+  // 2. MUTATIONS
   const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
   const createTour = useMutation(api.tours.create);
   const cancelBooking = useMutation(api.bookings.cancelBooking);
 
-  // 2. If not signed in, the Middleware should have caught this, 
-  // but as a fallback, we redirect.
-  if (!isSignedIn) {
-    return null;
-  }
+  // 3. STATE & REFS (Must be declared BEFORE any return statements)
+  const imageInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  
+  const [form, setForm] = useState({ 
+    title: "", 
+    description: "", 
+    price: 0, 
+    capacity: 10, 
+    date: "" 
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 3. Wait for Convex User Data
-  if (user === undefined) {
+  // 4. SECURITY CHECK (Redirect Effect)
+  useEffect(() => {
+    if (isLoaded) {
+      if (!isSignedIn) {
+        router.replace("/");
+      } else if (user !== undefined && user?.role !== "admin") {
+        router.replace("/");
+      }
+    }
+  }, [isLoaded, isSignedIn, user, router]);
+
+  // 5. LOADING VIEWS (Now safe to return)
+  if (!isLoaded || user === undefined) {
     return <div className="p-10 text-center">Verifying admin privileges...</div>;
   }
 
-  // 4. CHECK ROLE: If logged in but NOT admin
-  if (user === null || user.role !== "admin") {
-    // Redirect immediately
-    router.replace("/");
-    // Return null so the rest of the page (Admin Dashboard) NEVER renders
-    return null;
+  // Double check to hide UI while redirecting
+  if (user?.role !== "admin") {
+    return null; 
   }
 
-  // Form State
-  const imageInput = useRef<HTMLInputElement>(null);
-  const galleryInput = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10, date: "" });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
+  // --- HANDLERS ---
 
   const handleCancel = async (bookingId: Id<"bookings">) => {
     if (!confirm("Are you sure you want to cancel this booking? This will restore the tour capacity.")) {
@@ -59,19 +77,13 @@ export default function AdminDashboard() {
 
     try {
       await cancelBooking({ bookingId });
-      // The UI will update automatically because of Convex reactivity!
+      toast.success("Booking cancelled");
     } catch (error) {
       console.error(error);
-      alert("Failed to cancel booking. Check console.");
+      toast.error("Failed to cancel booking");
     }
   };
 
-  // 3. Early return for loading/security
-  if (user === undefined || (user && user.role !== "admin")) {
-    return <div className="p-10 text-center">Verifying permissions...</div>;
-  }
-
-  // Helper function to upload a single file
   const uploadFile = async (file: File) => {
     const postUrl = await generateUploadUrl();
     const result = await fetch(postUrl, {
@@ -89,14 +101,12 @@ export default function AdminDashboard() {
     setIsSubmitting(true);
 
     try {
-      // 1. Handle Cover Image Upload
       let coverImageId: Id<"_storage"> | undefined = undefined;
       const coverFile = imageInput.current?.files?.[0];
       if (coverFile) {
         coverImageId = await uploadFile(coverFile);
       }
 
-      // 2. Handle Gallery Images Upload
       const galleryImageIds: Id<"_storage">[] = [];
       const galleryFiles = galleryInput.current?.files;
       if (galleryFiles && galleryFiles.length > 0) {
@@ -105,28 +115,25 @@ export default function AdminDashboard() {
         galleryImageIds.push(...results);
       }
 
-      // 3. Save Tour to Database (CORRECTED BLOCK)
       await createTour({
-        // Do NOT use ...form here. List fields explicitly:
         title: form.title,
         description: form.description,
-        price: Number(form.price) * 100, // Convert to cents
+        price: Number(form.price) * 100,
         capacity: Number(form.capacity),
         startDate: form.date ? new Date(form.date).getTime() : Date.now(),
         coverImageId,
         galleryImageIds,
       });
 
-      alert("Tour Created Successfully!");
+      toast.success("Tour Created Successfully!");
 
-      // Reset Form & Inputs
       setForm({ title: "", description: "", price: 0, capacity: 10, date: "" });
       if (imageInput.current) imageInput.current.value = "";
       if (galleryInput.current) galleryInput.current.value = "";
 
     } catch (error) {
       console.error(error);
-      alert("Failed to create tour. See console.");
+      toast.error("Failed to create tour");
     } finally {
       setIsSubmitting(false);
     }
@@ -142,7 +149,6 @@ export default function AdminDashboard() {
           <TabsTrigger value="create">Create Tour</TabsTrigger>
         </TabsList>
 
-        {/* VIEW BOOKINGS TAB */}
         <TabsContent value="bookings">
           <Card>
             <CardHeader><CardTitle>Master Booking List</CardTitle></CardHeader>
@@ -157,6 +163,15 @@ export default function AdminDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {/* Handle empty state nicely */}
+                  {(!bookings || bookings.length === 0) && (
+                     <TableRow>
+                       <TableCell colSpan={4} className="text-center h-24 text-gray-500">
+                         No bookings found
+                       </TableCell>
+                     </TableRow>
+                  )}
+                  
                   {bookings?.map((b) => (
                     <TableRow key={b._id}>
                       <TableCell>
@@ -172,7 +187,7 @@ export default function AdminDashboard() {
                       <TableCell>
                         {b.status === "confirmed" ? (
                           <Button
-                            variant="destructive" // Red color for danger
+                            variant="destructive"
                             size="sm"
                             onClick={() => handleCancel(b._id)}
                           >
@@ -190,7 +205,6 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        {/* CREATE TOUR TAB */}
         <TabsContent value="create">
           <Card className="max-w-xl">
             <CardHeader><CardTitle>Add New Package</CardTitle></CardHeader>
@@ -205,7 +219,6 @@ export default function AdminDashboard() {
                   />
                 </div>
 
-                {/* DATE INPUT */}
                 <div className="grid gap-2">
                   <label>Start Date</label>
                   <Input
@@ -216,7 +229,6 @@ export default function AdminDashboard() {
                   />
                 </div>
 
-                {/* IMAGE INPUT */}
                 <div className="grid gap-2">
                   <label>Cover Image</label>
                   <Input
@@ -226,13 +238,12 @@ export default function AdminDashboard() {
                   />
                 </div>
 
-                {/* NEW GALLERY INPUT */}
                 <div className="grid gap-2">
                   <label>Gallery Images (Select Multiple)</label>
                   <Input
                     type="file"
                     accept="image/*"
-                    multiple  // <-- Crucial attribute
+                    multiple
                     ref={galleryInput}
                   />
                 </div>
