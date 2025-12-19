@@ -101,6 +101,8 @@ export const book = mutation({
       userId: user._id,
       ticketCount: args.ticketCount,
       status: "confirmed",
+      userName: user.name || "Anonymous",
+      userEmail: user.email || "No Email",
     });
 
     // Increment Tour Count by the number of tickets bought

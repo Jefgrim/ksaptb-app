@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
+import { Users } from "lucide-react"; // Optional icon
 
 export function BookingList() {
   const bookings = useQuery(api.bookings.getAllBookings);
@@ -23,15 +24,15 @@ export function BookingList() {
 
   // --- FILTER LOGIC ---
   const filteredBookings = bookings?.filter((b) => {
-    // 1. Filter by Reference (Safe check)
+    // 1. Filter by Reference
     const matchesRef = (b._id ?? "").toLowerCase().includes(searchRef.toLowerCase());
 
-    // 2. Filter by Name OR Email (Safe check with fallback "")
+    // 2. Filter by Name OR Email
     const matchesName = 
       (b.userName?.toLowerCase() ?? "").includes(searchName.toLowerCase()) ||
       (b.userEmail?.toLowerCase() ?? "").includes(searchName.toLowerCase());
 
-    // 3. Filter by Tour Title (Safe check)
+    // 3. Filter by Tour Title
     const matchesTour = (b.tourTitle?.toLowerCase() ?? "").includes(searchTour.toLowerCase());
 
     // 4. Filter by Status
@@ -83,7 +84,7 @@ export function BookingList() {
             onChange={(e) => setSearchTour(e.target.value)}
           />
           <select 
-            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
@@ -98,8 +99,9 @@ export function BookingList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[100px]">Ref</TableHead>
+                <TableHead className="w-[80px]">Ref</TableHead>
                 <TableHead>Customer</TableHead>
+                <TableHead className="w-[80px]">Guests</TableHead> {/* 👈 NEW COLUMN */}
                 <TableHead>Tour</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -108,20 +110,29 @@ export function BookingList() {
             <TableBody>
               {filteredBookings.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
+                  <TableCell colSpan={6} className="h-24 text-center">
                     {bookings === undefined ? "Loading..." : "No bookings found matching filters."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredBookings.map((b) => (
                   <TableRow key={b._id}>
-                    <TableCell className="font-mono text-xs">
+                    <TableCell className="font-mono text-xs text-gray-500">
                       {b._id.slice(-6)}
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{b.userName ?? "Unknown User"}</div>
                       <div className="text-xs text-gray-500">{b.userEmail ?? "No Email"}</div>
                     </TableCell>
+                    
+                    {/* 👇 NEW GUESTS CELL */}
+                    <TableCell>
+                        <div className="flex items-center gap-1">
+                            <Users className="h-3 w-3 text-gray-400" />
+                            <span className="font-medium">{b.ticketCount ?? 1}</span>
+                        </div>
+                    </TableCell>
+
                     <TableCell>{b.tourTitle ?? "Unknown Tour"}</TableCell>
                     <TableCell>
                       <Badge variant={b.status === "confirmed" ? "default" : "secondary"}>
