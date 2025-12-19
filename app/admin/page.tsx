@@ -68,27 +68,29 @@ export default function AdminDashboard() {
         coverImageId = await uploadFile(coverFile);
       }
 
-      // 2. Handle Gallery Images Upload (Loop through files)
+      // 2. Handle Gallery Images Upload
       const galleryImageIds: Id<"_storage">[] = [];
       const galleryFiles = galleryInput.current?.files;
       if (galleryFiles && galleryFiles.length > 0) {
-        // Upload all files concurrently
         const uploadPromises = Array.from(galleryFiles).map(uploadFile);
         const results = await Promise.all(uploadPromises);
         galleryImageIds.push(...results);
       }
 
-      // 3. Save Tour to Database
+      // 3. Save Tour to Database (CORRECTED BLOCK)
       await createTour({
-        ...form,
-        price: Number(form.price) * 100,
+        // Do NOT use ...form here. List fields explicitly:
+        title: form.title,
+        description: form.description,
+        price: Number(form.price) * 100, // Convert to cents
         capacity: Number(form.capacity),
         startDate: form.date ? new Date(form.date).getTime() : Date.now(),
         coverImageId,
-        galleryImageIds, // Pass the array
+        galleryImageIds,
       });
 
       alert("Tour Created Successfully!");
+
       // Reset Form & Inputs
       setForm({ title: "", description: "", price: 0, capacity: 10, date: "" });
       if (imageInput.current) imageInput.current.value = "";
