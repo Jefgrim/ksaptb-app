@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   // Mutations
   const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
   const createTour = useMutation(api.tours.create);
+  const cancelBooking = useMutation(api.bookings.cancelBooking);
 
   // 2. Security Redirect
   useEffect(() => {
@@ -37,6 +38,21 @@ export default function AdminDashboard() {
   const galleryInput = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10, date: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+
+  const handleCancel = async (bookingId: Id<"bookings">) => {
+    if (!confirm("Are you sure you want to cancel this booking? This will restore the tour capacity.")) {
+      return;
+    }
+
+    try {
+      await cancelBooking({ bookingId });
+      // The UI will update automatically because of Convex reactivity!
+    } catch (error) {
+      console.error(error);
+      alert("Failed to cancel booking. Check console.");
+    }
+  };
 
   // 3. Early return for loading/security
   if (user === undefined || (user && user.role !== "admin")) {
@@ -142,7 +158,17 @@ export default function AdminDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm">Manage</Button>
+                        {b.status === "confirmed" ? (
+                          <Button
+                            variant="destructive" // Red color for danger
+                            size="sm"
+                            onClick={() => handleCancel(b._id)}
+                          >
+                            Cancel
+                          </Button>
+                        ) : (
+                          <span className="text-gray-400 italic text-xs">Cancelled</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
