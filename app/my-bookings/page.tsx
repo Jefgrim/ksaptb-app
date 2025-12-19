@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useMutation } from "convex/react";
 
 export default function MyBookings() {
-    const data = useQuery(api.booking.getMyBookings);
-    const cancel = useMutation(api.booking.cancelBooking);
+    const data = useQuery(api.bookings.getMyBookings);
+    const cancel = useMutation(api.bookings.cancelBooking);
 
     if (!data) return <div className="p-10 text-center">Loading bookings...</div>;
 
