@@ -66,9 +66,9 @@ export default function MyBookings() {
             <CardContent className="p-0 flex flex-col md:flex-row">
               {/* Thumbnail Image */}
               <div className="w-full md:w-48 h-32 relative bg-gray-200 shrink-0">
-                {tour?.coverImageId ? (
+                {tour?.imageUrl ? (
                   <img 
-                    src={tour.coverImageId} 
+                    src={tour.imageUrl} 
                     alt={tour.title} 
                     className="w-full h-full object-cover" 
                   />

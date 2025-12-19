@@ -4,7 +4,6 @@ import { requireAdmin, requireUser } from "./auth";
 
 export const getMyBookings = query({
   handler: async (ctx) => {
-    // We don't throw error here, just return empty list if not logged in
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
@@ -20,11 +19,24 @@ export const getMyBookings = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Join with Tour data
+    // Join with Tour data AND generate Image URL
     const bookingsWithTour = await Promise.all(
       bookings.map(async (booking) => {
         const tour = await ctx.db.get(booking.tourId);
-        return { ...booking, tour };
+        
+        // --- NEW CODE START ---
+        let imageUrl = null;
+        if (tour && tour.coverImageId) {
+          // Convert the Storage ID (internal) to a URL (public)
+          imageUrl = await ctx.storage.getUrl(tour.coverImageId);
+        }
+        // --- NEW CODE END ---
+
+        return { 
+          ...booking, 
+          // We attach the new imageUrl to the tour object
+          tour: tour ? { ...tour, imageUrl } : null 
+        };
       })
     );
 
@@ -32,7 +44,7 @@ export const getMyBookings = query({
   },
 });
 
-// SECURED CANCEL
+// ... (Keep your cancelBooking and getAllBookings functions exactly the same)
 export const cancelBooking = mutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
@@ -64,7 +76,6 @@ export const cancelBooking = mutation({
   },
 });
 
-// SECURED ADMIN LIST
 export const getAllBookings = query({
   handler: async (ctx) => {
     // 1. Security Check
