@@ -109,37 +109,71 @@ export const book = mutation({
 
 // ... existing code ...
 
-// 5. ADMIN: Delete Tour
+// 5. ADMIN: Delete Tour (WITH IMAGE CLEANUP)
 export const deleteTour = mutation({
   args: { id: v.id("tours") },
   handler: async (ctx, args) => {
-    // 1. Security Check
     await requireAdmin(ctx);
 
-    // 2. Delete the tour doc
-    await ctx.db.delete(args.id);
+    // 1. Fetch the tour first so we know which images to delete
+    const tour = await ctx.db.get(args.id);
+    if (!tour) return; // Already deleted?
 
-    // Note: In a production app, you might also want to 
-    // delete the associated images from storage here to save space.
+    // 2. Delete the Cover Image
+    if (tour.coverImageId) {
+      await ctx.storage.delete(tour.coverImageId);
+    }
+
+    // 3. Delete the Gallery Images
+    if (tour.galleryImageIds) {
+      for (const imageId of tour.galleryImageIds) {
+        await ctx.storage.delete(imageId);
+      }
+    }
+
+    // 4. Finally, delete the database record
+    await ctx.db.delete(args.id);
   },
 });
 
-// 6. ADMIN: Update Tour
+// 6. ADMIN: Update Tour (WITH IMAGE REPLACEMENT CLEANUP)
 export const update = mutation({
   args: {
     id: v.id("tours"),
-    // All fields are optional because we might only change one
     title: v.optional(v.string()),
     description: v.optional(v.string()),
     price: v.optional(v.number()),
     capacity: v.optional(v.number()),
     startDate: v.optional(v.number()),
-    coverImageId: v.optional(v.id("_storage")),
-    galleryImageIds: v.optional(v.array(v.id("_storage"))),
+    coverImageId: v.optional(v.id("_storage")), // The NEW image ID
+    galleryImageIds: v.optional(v.array(v.id("_storage"))), // The NEW gallery IDs
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;
     await requireAdmin(ctx);
+
+    const tour = await ctx.db.get(id);
+    if (!tour) throw new ConvexError("Tour not found");
+
+    // 1. Handle Cover Image Replacement
+    // If a NEW cover image is provided, delete the OLD one.
+    if (fields.coverImageId && tour.coverImageId) {
+      // Check to ensure we aren't accidentally deleting the same image 
+      // (unlikely, but good safety)
+      if (fields.coverImageId !== tour.coverImageId) {
+        await ctx.storage.delete(tour.coverImageId);
+      }
+    }
+
+    // 2. Handle Gallery Replacement
+    // If a NEW gallery is provided, delete ALL old gallery images.
+    if (fields.galleryImageIds && tour.galleryImageIds) {
+      for (const oldImageId of tour.galleryImageIds) {
+         await ctx.storage.delete(oldImageId);
+      }
+    }
+
+    // 3. Update the database document
     await ctx.db.patch(id, fields);
   },
 });
