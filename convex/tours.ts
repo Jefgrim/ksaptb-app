@@ -79,30 +79,33 @@ export const create = mutation({
 
 // 4. BOOK TOUR (Transaction Logic)
 export const book = mutation({
-  args: { tourId: v.id("tours") },
+  args: { 
+    tourId: v.id("tours"),
+    ticketCount: v.number(), // <--- NEW ARGUMENT
+  },
   handler: async (ctx, args) => {
-
     // Verify User
     const user = await requireUser(ctx);
 
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
 
-    // RACE CONDITION CHECK
-    if (tour.bookedCount >= tour.capacity) {
-      throw new ConvexError("Sorry, this tour is sold out.");
+    // NEW CHECK: Ensure enough capacity for the requested amount
+    if (tour.bookedCount + args.ticketCount > tour.capacity) {
+      throw new ConvexError(`Not enough spots. Only ${tour.capacity - tour.bookedCount} left.`);
     }
 
-    // Create Booking
+    // Create Booking with ticket count
     await ctx.db.insert("bookings", {
       tourId: tour._id,
       userId: user._id,
+      ticketCount: args.ticketCount,
       status: "confirmed",
     });
 
-    // Increment Count
+    // Increment Tour Count by the number of tickets bought
     await ctx.db.patch(tour._id, {
-      bookedCount: tour.bookedCount + 1,
+      bookedCount: tour.bookedCount + args.ticketCount,
     });
   },
 });

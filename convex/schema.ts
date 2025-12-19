@@ -23,6 +23,7 @@ export default defineSchema({
   bookings: defineTable({
     tourId: v.id("tours"),
     userId: v.id("users"),
+    ticketCount: v.number(),
     status: v.string(), // "confirmed"
   }).index("by_tour", ["tourId"]).index("by_user", ["userId"]),
 });

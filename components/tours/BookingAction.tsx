@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { Card, CardContent } from "@/components/ui/card";
+import { Minus, Plus } from "lucide-react";
 
 interface BookingActionProps {
   tourId: Id<"tours">;
@@ -26,13 +28,32 @@ export function BookingAction({
   const { isLoaded, isSignedIn } = useUser();
   const bookTour = useMutation(api.tours.book);
 
-  const isSoldOut = bookedCount >= capacity;
-  const remaining = capacity - bookedCount;
+  // --- NEW: Quantity State ---
+  const [ticketCount, setTicketCount] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Derived calculations
+  const remainingSpots = capacity - bookedCount;
+  const isSoldOut = remainingSpots <= 0;
+  const totalPrice = price * ticketCount;
+
+  // Handlers for + and - buttons
+  const increment = () => {
+    if (ticketCount < remainingSpots) setTicketCount(c => c + 1);
+  };
+
+  const decrement = () => {
+    if (ticketCount > 1) setTicketCount(c => c - 1);
+  };
 
   const handleBook = async () => {
+    setIsSubmitting(true);
     try {
-      await bookTour({ tourId });
-      toast.success("Tour booked successfully! Check 'My Bookings'.");
+      await bookTour({ 
+        tourId, 
+        ticketCount // <--- Pass the count to backend
+      });
+      toast.success(`Success! Booked ${ticketCount} ticket(s).`);
       router.push("/my-bookings");
     } catch (error: any) {
       if (error instanceof ConvexError) {
@@ -41,47 +62,97 @@ export function BookingAction({
         console.error(error);
         toast.error("Something went wrong. Please try again.");
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Card className="bg-slate-50 border-none shadow-sm">
-      <CardContent className="p-6 space-y-4">
+    <Card className="bg-slate-50 border-none shadow-sm sticky top-6">
+      <CardContent className="p-6 space-y-5">
+        
         {/* Info Block */}
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between border-b pb-2">
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between items-center border-b border-slate-200 pb-3">
             <span className="text-gray-600">Price per person</span>
-            <span className="font-bold text-lg">${(price / 100).toFixed(2)}</span>
+            <span className="font-semibold text-lg">${(price / 100).toFixed(2)}</span>
           </div>
-          <div className="flex justify-between">
+          
+          <div className="flex justify-between items-center">
             <span className="text-gray-600">Date</span>
             <span className="font-medium">{new Date(startDate).toLocaleDateString()}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Availability</span>
-            <span className={`font-medium ${remaining < 5 ? "text-orange-600" : ""}`}>
-               {isSoldOut ? "Sold Out" : `${remaining} spots left`}
+          
+          <div className="flex justify-between items-center">
+             <span className="text-gray-600">Availability</span>
+             <span className={`font-medium ${remainingSpots < 5 ? "text-orange-600" : "text-green-600"}`}>
+               {isSoldOut ? "Sold Out" : `${remainingSpots} spots left`}
             </span>
           </div>
         </div>
 
+        {/* --- Quantity Selector --- */}
+        {!isSoldOut && (
+          <div className="bg-white p-3 rounded-lg border flex items-center justify-between shadow-sm">
+            <span className="text-sm font-medium text-gray-700">Guests</span>
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={decrement}
+                disabled={ticketCount <= 1}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-6 text-center font-bold text-lg">{ticketCount}</span>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={increment}
+                disabled={ticketCount >= remainingSpots}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Total Price Display */}
+        {!isSoldOut && (
+          <div className="flex justify-between items-end pt-2 border-t border-slate-200 mt-2">
+            <span className="font-bold text-gray-900 text-lg">Total</span>
+            <div className="text-right">
+              <span className="block font-bold text-3xl text-blue-600">
+                ${(totalPrice / 100).toFixed(2)}
+              </span>
+              {ticketCount > 1 && (
+                <span className="text-xs text-gray-500">
+                  {ticketCount} tickets @ ${(price / 100).toFixed(2)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Action Button */}
         {!isLoaded ? (
-          <Button disabled className="w-full">Loading...</Button>
+          <Button disabled className="w-full h-12">Loading...</Button>
         ) : !isSignedIn ? (
           <SignInButton mode="modal">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700">
+            <Button className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg">
               Log in to Book
             </Button>
           </SignInButton>
         ) : (
           <Button
             size="lg"
-            className="w-full"
+            className="w-full h-12 text-lg font-semibold"
             onClick={handleBook}
-            disabled={isSoldOut}
+            disabled={isSoldOut || isSubmitting}
           >
-            {isSoldOut ? "Sold Out" : "Book Now"}
+            {isSubmitting ? "Processing..." : isSoldOut ? "Sold Out" : "Book Now"}
           </Button>
         )}
       </CardContent>
