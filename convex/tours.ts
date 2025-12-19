@@ -134,7 +134,8 @@ export const update = mutation({
     price: v.optional(v.number()),
     capacity: v.optional(v.number()),
     startDate: v.optional(v.number()),
-    // We won't touch images in this simple edit version to keep it stable
+    coverImageId: v.optional(v.id("_storage")),
+    galleryImageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,20 +14,37 @@ import { Id } from "@/convex/_generated/dataModel";
 
 export function TourList() {
   const tours = useQuery(api.tours.list);
+  
+  // Mutations
   const deleteTour = useMutation(api.tours.deleteTour);
   const updateTour = useMutation(api.tours.update);
+  const generateUploadUrl = useMutation(api.tours.generateUploadUrl); // Needed for image uploads
 
-  // State for the tour currently being edited
+  // State
   const [editingId, setEditingId] = useState<Id<"tours"> | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Temporary form state for the edit modal
+  // Refs for file inputs
+  const imageInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+
+  // Form State
   const [editForm, setEditForm] = useState({
-    title: "",
-    description: "",
-    price: 0,
-    capacity: 0,
-    date: "",
+    title: "", description: "", price: 0, capacity: 0, date: "",
   });
+
+  // --- HELPERS ---
+
+  const uploadFile = async (file: File) => {
+    const postUrl = await generateUploadUrl();
+    const result = await fetch(postUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    const { storageId } = await result.json();
+    return storageId as Id<"_storage">;
+  };
 
   const handleDelete = async (id: Id<"tours">) => {
     if (!confirm("Delete this tour permanently?")) return;
@@ -39,15 +56,13 @@ export function TourList() {
     }
   };
 
-  // Open the modal and load data
   const openEdit = (tour: any) => {
     setEditingId(tour._id);
     setEditForm({
       title: tour.title,
       description: tour.description,
-      price: tour.price / 100, // Convert cents to dollars
+      price: tour.price / 100,
       capacity: tour.capacity,
-      // Convert timestamp back to YYYY-MM-DD for input
       date: new Date(tour.startDate).toISOString().split('T')[0],
     });
   };
@@ -55,21 +70,44 @@ export function TourList() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingId) return;
+    setIsSubmitting(true);
 
     try {
+      // 1. Handle Cover Image (Only upload if user picked a new one)
+      let newCoverImageId: Id<"_storage"> | undefined = undefined;
+      if (imageInput.current?.files?.[0]) {
+        newCoverImageId = await uploadFile(imageInput.current.files[0]);
+      }
+
+      // 2. Handle Gallery Images (Only upload if user picked new ones)
+      // Note: This replaces the entire gallery. Merging is harder (requires more UI).
+      let newGalleryIds: Id<"_storage">[] | undefined = undefined;
+      if (galleryInput.current?.files && galleryInput.current.files.length > 0) {
+        newGalleryIds = await Promise.all(
+          Array.from(galleryInput.current.files).map(uploadFile)
+        );
+      }
+
+      // 3. Send Update to Backend
       await updateTour({
         id: editingId,
         title: editForm.title,
         description: editForm.description,
-        price: Number(editForm.price) * 100, // Convert back to cents
+        price: Number(editForm.price) * 100,
         capacity: Number(editForm.capacity),
         startDate: new Date(editForm.date).getTime(),
+        // Only include these if they are defined (meaning user uploaded something)
+        ...(newCoverImageId && { coverImageId: newCoverImageId }),
+        ...(newGalleryIds && { galleryImageIds: newGalleryIds }),
       });
+
       toast.success("Tour updated successfully!");
-      setEditingId(null); // Close modal
+      setEditingId(null);
     } catch (error) {
       console.error(error);
       toast.error("Failed to update tour");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -100,71 +138,67 @@ export function TourList() {
                 <TableCell>{tour.bookedCount} / {tour.capacity}</TableCell>
                 <TableCell className="text-right space-x-2">
                   
-                  {/* EDIT BUTTON opens Dialog */}
+                  {/* EDIT DIALOG */}
                   <Dialog open={editingId === tour._id} onOpenChange={(open) => !open && setEditingId(null)}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" onClick={() => openEdit(tour)}>
-                        Edit
-                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => openEdit(tour)}>Edit</Button>
                     </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Edit Tour</DialogTitle>
-                      </DialogHeader>
+                    <DialogContent className="max-h-[80vh] overflow-y-auto">
+                      <DialogHeader><DialogTitle>Edit Tour</DialogTitle></DialogHeader>
                       <form onSubmit={handleUpdate} className="space-y-4 mt-4">
+                        
+                        {/* Text Fields */}
                         <div className="grid gap-2">
                           <Label>Title</Label>
-                          <Input 
-                            value={editForm.title} 
-                            onChange={(e) => setEditForm({...editForm, title: e.target.value})} 
-                          />
+                          <Input value={editForm.title} onChange={(e) => setEditForm({...editForm, title: e.target.value})} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="grid gap-2">
                             <Label>Price ($)</Label>
-                            <Input 
-                              type="number" 
-                              value={editForm.price} 
-                              onChange={(e) => setEditForm({...editForm, price: +e.target.value})} 
-                            />
+                            <Input type="number" value={editForm.price} onChange={(e) => setEditForm({...editForm, price: +e.target.value})} />
                           </div>
                           <div className="grid gap-2">
                             <Label>Capacity</Label>
-                            <Input 
-                              type="number" 
-                              value={editForm.capacity} 
-                              onChange={(e) => setEditForm({...editForm, capacity: +e.target.value})} 
-                            />
+                            <Input type="number" value={editForm.capacity} onChange={(e) => setEditForm({...editForm, capacity: +e.target.value})} />
                           </div>
                         </div>
                         <div className="grid gap-2">
                           <Label>Date</Label>
-                          <Input 
-                            type="date" 
-                            value={editForm.date} 
-                            onChange={(e) => setEditForm({...editForm, date: e.target.value})} 
-                          />
+                          <Input type="date" value={editForm.date} onChange={(e) => setEditForm({...editForm, date: e.target.value})} />
                         </div>
                         <div className="grid gap-2">
                           <Label>Description</Label>
-                          <Input 
-                            value={editForm.description} 
-                            onChange={(e) => setEditForm({...editForm, description: e.target.value})} 
-                          />
+                          <Input value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} />
                         </div>
+
+                        {/* --- NEW: Image Inputs --- */}
+                        <div className="grid gap-2 p-3 bg-gray-50 rounded border">
+                          <Label className="font-bold">Update Images</Label>
+                          
+                          <div className="text-xs text-gray-500 mb-2">
+                            Current Cover: {tour.coverImageId ? "✅ Set" : "❌ None"}
+                          </div>
+                          <Label className="text-xs">Replace Cover Image (Optional)</Label>
+                          <Input type="file" accept="image/*" ref={imageInput} />
+
+                          <div className="h-2"></div>
+
+                          <Label className="text-xs">Replace Gallery (Optional)</Label>
+                          <Input type="file" accept="image/*" multiple ref={galleryInput} />
+                          <p className="text-[10px] text-gray-400">Uploading gallery images here will replace the entire existing gallery.</p>
+                        </div>
+
                         <div className="flex justify-end gap-2 mt-4">
                           <Button type="button" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
-                          <Button type="submit">Save Changes</Button>
+                          <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? "Saving..." : "Save Changes"}
+                          </Button>
                         </div>
                       </form>
                     </DialogContent>
                   </Dialog>
 
-                  {/* DELETE BUTTON */}
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(tour._id)}>
-                    Delete
-                  </Button>
-
+                  <Button variant="destructive" size="sm" onClick={() => handleDelete(tour._id)}>Delete</Button>
                 </TableCell>
               </TableRow>
             ))}
