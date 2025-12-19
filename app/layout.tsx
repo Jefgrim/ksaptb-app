@@ -9,7 +9,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ConvexClientProvider>
           {children}
           
-          <Toaster /> 
+          <Toaster richColors /> 
           
         </ConvexClientProvider>
       </body>

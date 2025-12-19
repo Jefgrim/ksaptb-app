@@ -127,8 +127,10 @@ export const deleteTour = mutation({
       .withIndex("by_tour", (q) => q.eq("tourId", args.id))
       .collect();
 
-    if (bookings.length > 0) {
-      throw new ConvexError("Cannot delete this tour because it has existing bookings. Cancel them first.");
+    const activeBookings = bookings.filter(b => b.status !== "cancelled");
+
+    if (activeBookings.length > 0) {
+      throw new ConvexError("Cannot delete this tour because it has active bookings. Cancel them first.");
     }
 
     // 1. Fetch the tour first so we know which images to delete
