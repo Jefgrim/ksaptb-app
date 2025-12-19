@@ -39,6 +39,10 @@ export default function Home() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-600 mb-2">{tour.description}</p>
+              {/* DATE LINE */}
+              <p className="text-sm font-medium text-blue-600 mb-4">
+                📅 {new Date(tour.startDate).toLocaleDateString()}
+              </p>
               <div className="flex justify-between text-sm font-semibold">
                 <span>${tour.price / 100}</span>
                 <span>{tour.capacity - tour.bookedCount} spots left</span>

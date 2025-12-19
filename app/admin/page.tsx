@@ -165,6 +165,17 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                {/* DATE INPUT */}
+                <div className="grid gap-2">
+                  <label>Start Date</label>
+                  <Input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    required
+                  />
+                </div>
+
                 {/* IMAGE INPUT */}
                 <div className="grid gap-2">
                   <label>Cover Image</label>
