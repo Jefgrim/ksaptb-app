@@ -5,7 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useParams } from "next/navigation"; // <--- 1. Import this
+import { useParams } from "next/navigation"; 
 import {
   Carousel,
   CarouselContent,
@@ -13,29 +13,17 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import Image from "next/image";
 
 export default function TourDetail() {
-  // 2. Use the hook instead of props
   const params = useParams();
-
-  // 3. Safely cast the ID (it might be undefined initially)
   const tourId = params.id as Id<"tours">;
 
-  // 4. CONDITIONAL FETCH: If tourId is missing, pass "skip" to prevent the crash
+  // 1. All Hooks must be at the top level
   const tour = useQuery(api.tours.get, tourId ? { id: tourId } : "skip");
-
-  if (!tour) return <div className="p-10 text-center">Loading...</div>;
-
-  const allImages = [
-    ...(tour.imageUrl ? [tour.imageUrl] : []),
-    ...(tour.galleryUrls || []),
-  ];
-
-  const bookTour = useMutation(api.tours.book);
+  const bookTour = useMutation(api.tours.book); // <--- MOVED UP (Fixes the crash)
 
   const handleBook = async () => {
-    if (!tourId) return; // Safety check
+    if (!tourId) return; 
     try {
       await bookTour({ tourId });
       toast.success("Tour booked successfully!");
@@ -44,10 +32,16 @@ export default function TourDetail() {
     }
   };
 
-  // 5. Handle loading (tour is undefined) or invalid ID
+  // 2. NOW you can do conditional returns
   if (!tour) {
     return <div className="p-10 text-center">Loading details...</div>;
   }
+
+  // Combine images for the carousel
+  const allImages = [
+    ...(tour.imageUrl ? [tour.imageUrl] : []),
+    ...(tour.galleryUrls || []),
+  ];
 
   return (
     <div className="container mx-auto p-10">
@@ -59,9 +53,8 @@ export default function TourDetail() {
             <CarouselContent>
               {allImages.map((url, index) => (
                 <CarouselItem key={index} className="h-64 md:h-96 relative">
-                  {/* Using standard img tag for simplicity, can use Next/Image later */}
-                  <img
-                    src={url}
+                  <img 
+                    src={url} 
                     alt={`Gallery image ${index + 1}`}
                     className="w-full h-full object-cover rounded-lg"
                   />
@@ -76,7 +69,6 @@ export default function TourDetail() {
             )}
           </Carousel>
         ) : (
-          // Fallback if no images at all
           <div className="h-64 mb-6 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
             No images available
           </div>
@@ -91,8 +83,8 @@ export default function TourDetail() {
           <p><strong>Availability:</strong> {tour.capacity - tour.bookedCount} / {tour.capacity}</p>
         </div>
 
-        <Button
-          size="lg"
+        <Button 
+          size="lg" 
           className="w-full"
           onClick={handleBook}
           disabled={tour.bookedCount >= tour.capacity}
