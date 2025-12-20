@@ -1,21 +1,47 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { requireAdmin, requireUser } from "./auth"; // Import our new helpers
+import { requireAdmin, requireUser } from "./auth";
 
-
-// 1. Helper to generate a URL for uploading files
 export const generateUploadUrl = mutation(async (ctx) => {
   return await ctx.storage.generateUploadUrl();
 });
 
-// 1. List all tours
+// HELPER: Get start of today in KSA (as timestamp)
+function getKsaToday() {
+  const ksaString = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+  return new Date(`${ksaString}T00:00:00+03:00`).getTime();
+}
+
+// 1. ADMIN LIST (Shows ALL tours, even past ones, so you can manage them)
 export const list = query({
   handler: async (ctx) => {
     const tours = await ctx.db.query("tours").collect();
 
-    // Convert Storage ID to a viewable URL for every tour
+    // Filter out soft-deleted tours if you implemented that previously
+    // const activeTours = tours.filter(t => !t.isDeleted); 
+
     return await Promise.all(
       tours.map(async (tour) => ({
+        ...tour,
+        imageUrl: tour.coverImageId
+          ? await ctx.storage.getUrl(tour.coverImageId)
+          : null,
+      }))
+    );
+  },
+});
+
+// 1.5. PUBLIC LIST (Shows ONLY Upcoming tours)
+export const listUpcoming = query({
+  handler: async (ctx) => {
+    const tours = await ctx.db.query("tours").collect();
+    const now = Date.now();
+
+    // FILTER: Start Date must be in the future
+    const upcomingTours = tours.filter(tour => tour.startDate >= now);
+
+    return await Promise.all(
+      upcomingTours.map(async (tour) => ({
         ...tour,
         imageUrl: tour.coverImageId
           ? await ctx.storage.getUrl(tour.coverImageId)
@@ -32,12 +58,10 @@ export const get = query({
     const tour = await ctx.db.get(args.id);
     if (!tour) return null;
 
-    // Resolve Cover Image URL
     const coverUrl = tour.coverImageId
       ? await ctx.storage.getUrl(tour.coverImageId)
       : null;
 
-    // Resolve Gallery Image URLs (concurrently for speed)
     const galleryUrls = tour.galleryImageIds
       ? await Promise.all(
         tour.galleryImageIds.map((id) => ctx.storage.getUrl(id))
@@ -46,8 +70,8 @@ export const get = query({
 
     return {
       ...tour,
-      imageUrl: coverUrl, // Keep backward compatibility for homepage
-      galleryUrls: galleryUrls.filter(url => url !== null), // Ensure no nulls
+      imageUrl: coverUrl,
+      galleryUrls: galleryUrls.filter(url => url !== null),
     };
   },
 });
@@ -64,10 +88,15 @@ export const create = mutation({
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
-    // ONE LINE SECURITY CHECK
     await requireAdmin(ctx);
 
-    // In a real app, verify user.role === 'admin' here using a helper
+    const ksaToday = getKsaToday();
+
+    // We allow a small buffer (e.g., creating a tour for "today" is okay)
+    // but strictly speaking, args.startDate (00:00 KSA) should be >= ksaToday
+    if (args.startDate < ksaToday) {
+      throw new ConvexError("Cannot create a tour in the past (Saudi Time).");
+    }
 
     return await ctx.db.insert("tours", {
       ...args,
@@ -77,7 +106,7 @@ export const create = mutation({
   },
 });
 
-// 4. BOOK TOUR (Transaction Logic)
+// 4. BOOK TOUR
 export const book = mutation({
   args: {
     tourId: v.id("tours"),
@@ -88,6 +117,11 @@ export const book = mutation({
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
 
+    // OPTIONAL: Prevent booking if the tour has already started/passed
+    if (tour.startDate < Date.now()) {
+      throw new ConvexError("This tour has already started or ended.");
+    }
+
     if (tour.bookedCount + args.ticketCount > tour.capacity) {
       throw new ConvexError("Not enough spots left.");
     }
@@ -97,12 +131,8 @@ export const book = mutation({
       userId: user._id,
       ticketCount: args.ticketCount,
       status: "confirmed",
-
-      // User Snapshots
       userName: user.name || "Anonymous",
       userEmail: user.email || "No Email",
-
-      // TOUR SNAPSHOTS
       tourTitle: tour.title,
       tourDate: tour.startDate,
       tourPrice: tour.price,
@@ -114,9 +144,7 @@ export const book = mutation({
   },
 });
 
-// ... existing code ...
-
-// 5. ADMIN: Delete Tour (WITH IMAGE CLEANUP)
+// 5. ADMIN: Delete Tour
 export const deleteTour = mutation({
   args: { id: v.id("tours") },
   handler: async (ctx, args) => {
@@ -133,28 +161,21 @@ export const deleteTour = mutation({
       throw new ConvexError("Cannot delete this tour because it has active bookings. Cancel them first.");
     }
 
-    // 1. Fetch the tour first so we know which images to delete
     const tour = await ctx.db.get(args.id);
-    if (!tour) return; // Already deleted?
+    if (!tour) return;
 
-    // 2. Delete the Cover Image
-    if (tour.coverImageId) {
-      await ctx.storage.delete(tour.coverImageId);
-    }
-
-    // 3. Delete the Gallery Images
+    if (tour.coverImageId) await ctx.storage.delete(tour.coverImageId);
     if (tour.galleryImageIds) {
       for (const imageId of tour.galleryImageIds) {
         await ctx.storage.delete(imageId);
       }
     }
 
-    // 4. Finally, delete the database record
     await ctx.db.delete(args.id);
   },
 });
 
-// 6. ADMIN: Update Tour (WITH IMAGE REPLACEMENT CLEANUP)
+// 6. ADMIN: Update Tour
 export const update = mutation({
   args: {
     id: v.id("tours"),
@@ -163,8 +184,8 @@ export const update = mutation({
     price: v.optional(v.number()),
     capacity: v.optional(v.number()),
     startDate: v.optional(v.number()),
-    coverImageId: v.optional(v.id("_storage")), // The NEW image ID
-    galleryImageIds: v.optional(v.array(v.id("_storage"))), // The NEW gallery IDs
+    coverImageId: v.optional(v.id("_storage")),
+    galleryImageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;
@@ -173,25 +194,24 @@ export const update = mutation({
     const tour = await ctx.db.get(id);
     if (!tour) throw new ConvexError("Tour not found");
 
-    // 1. Handle Cover Image Replacement
-    // If a NEW cover image is provided, delete the OLD one.
-    if (fields.coverImageId && tour.coverImageId) {
-      // Check to ensure we aren't accidentally deleting the same image 
-      // (unlikely, but good safety)
-      if (fields.coverImageId !== tour.coverImageId) {
-        await ctx.storage.delete(tour.coverImageId);
+    // VALIDATION: Prevent updating to a past date
+    if (fields.startDate) {
+      const ksaToday = getKsaToday();
+      if (fields.startDate < ksaToday) {
+        throw new ConvexError("Cannot move a tour to the past (Saudi Time).");
       }
     }
 
-    // 2. Handle Gallery Replacement
-    // If a NEW gallery is provided, delete ALL old gallery images.
+    if (fields.coverImageId && tour.coverImageId && fields.coverImageId !== tour.coverImageId) {
+      await ctx.storage.delete(tour.coverImageId);
+    }
+
     if (fields.galleryImageIds && tour.galleryImageIds) {
       for (const oldImageId of tour.galleryImageIds) {
         await ctx.storage.delete(oldImageId);
       }
     }
 
-    // 3. Update the database document
     await ctx.db.patch(id, fields);
   },
 });

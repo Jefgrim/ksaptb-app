@@ -18,6 +18,10 @@ export function CreateTourForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", price: 0, capacity: 10, date: "" });
 
+  // 1. GET TODAY IN KSA (YYYY-MM-DD)
+  // This ensures the calendar blocks dates based on Saudi time, not local browser time.
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Riyadh" });
+
   const uploadFile = async (file: File) => {
     const postUrl = await generateUploadUrl();
     const result = await fetch(postUrl, {
@@ -31,6 +35,13 @@ export function CreateTourForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    //  VALIDATION AGAINST KSA TIME
+    if (form.date < todayStr) {
+      toast.error("Please select a future date (Saudi Time).");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       let coverImageId: Id<"_storage"> | undefined;
@@ -44,12 +55,15 @@ export function CreateTourForm() {
         galleryImageIds.push(...await Promise.all(files.map(uploadFile)));
       }
 
+      // CREATE TIMESTAMP FOR KSA MIDNIGHT
+      const ksaDateTimestamp = new Date(`${form.date}T00:00:00+03:00`).getTime();
+
       await createTour({
         title: form.title,
         description: form.description,
         price: Number(form.price) * 100,
         capacity: Number(form.capacity),
-        startDate: form.date ? new Date(form.date).getTime() : Date.now(),
+        startDate: ksaDateTimestamp,
         coverImageId,
         galleryImageIds,
       });
@@ -72,7 +86,10 @@ export function CreateTourForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input placeholder="Tour Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-          <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          
+          {/* Added min={todayStr} */}
+          <Input type="date" min={todayStr} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+          
           <div className="grid grid-cols-2 gap-4">
              <Input type="number" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: +e.target.value })} required />
              <Input type="number" placeholder="Capacity" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: +e.target.value })} required />

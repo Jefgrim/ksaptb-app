@@ -10,7 +10,9 @@ import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { CalendarIcon, MapPin, Ticket } from "lucide-react";
 
 export default function Home() {
-  const tours = useQuery(api.tours.list);
+  // Use listUpcoming to hide past tours from the homepage
+  const tours = useQuery(api.tours.listUpcoming);
+  
   const { isSignedIn, isLoaded } = useUser();
 
   // --- LOADING STATE ---
@@ -122,8 +124,8 @@ export default function Home() {
                 <CardContent className="flex-1 p-5">
                   <div className="flex items-center text-sm text-blue-600 font-medium mb-2">
                     <CalendarIcon className="w-4 h-4 mr-1.5" />
-                    {new Date(tour.startDate).toLocaleDateString(undefined, {
-                      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+                    {new Date(tour.startDate).toLocaleDateString("en-US", {
+                      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: "Asia/Riyadh"
                     })}
                   </div>
 
@@ -161,7 +163,7 @@ export default function Home() {
         
         {tours?.length === 0 && (
           <div className="text-center py-20 text-gray-400">
-            No tours available at the moment. Check back soon!
+            No upcoming tours available. Check back soon!
           </div>
         )}
       </main>
