@@ -7,19 +7,20 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
+import { Users } from "lucide-react";
 
-// Update the interface to include the SNAPSHOT fields from your schema
 interface BookingProps {
   booking: {
     _id: Id<"bookings">;
     status: string;
+    ticketCount: number; // Added ticketCount
     
-    // Snapshot fields (These exist in your schema!)
+    // Snapshot fields
     tourTitle: string;
     tourDate: number;
     tourPrice: number;
 
-    // The "Live" relation (might be null if deleted)
+    // The "Live" relation
     tour: {
       title: string;
       startDate: number;
@@ -33,15 +34,22 @@ interface BookingProps {
 export function BookingCard({ booking, allowCancel }: BookingProps) {
   const cancel = useMutation(api.bookings.cancelBooking);
   
-  // Destructure everything we need
-  const { tour, status, _id, tourTitle, tourDate, tourPrice } = booking;
+  // Destructure everything including ticketCount
+  const { tour, status, _id, tourTitle, tourDate, tourPrice, ticketCount } = booking;
 
-  // LOGIC: Try to get "Live" data first. If null, use the "Snapshot".
-  const displayTitle = tour?.title || tourTitle || "Unknown Tour";
-  const displayDate = tour?.startDate || tourDate || Date.now();
-  const displayPrice = tour?.price || tourPrice || 0;
+  // --- INTEGRITY FIX ---
+  // We prioritize the SNAPSHOT data (saved at booking time).
+  // We only fallback to 'tour.*' (live data) if the snapshot is missing.
   
-  // Image is special: if tour is deleted, the image file is likely gone too.
+  const displayTitle = tourTitle || tour?.title || "Unknown Tour";
+  const displayDate = tourDate || tour?.startDate || Date.now();
+  
+  // Price Logic: Use snapshot price, fallback to live, default to 0
+  const unitPrice = tourPrice !== undefined ? tourPrice : (tour?.price || 0);
+  const count = ticketCount || 1;
+  const totalPrice = unitPrice * count;
+
+  // Image Logic: We still use the live image (images are rarely snapshotted due to size)
   const displayImage = tour?.imageUrl; 
 
   const handleCancel = async () => {
@@ -56,7 +64,7 @@ export function BookingCard({ booking, allowCancel }: BookingProps) {
   };
 
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow bg-white">
+    <Card className="overflow-hidden hover:shadow-md transition-shadow bg-white border-slate-200">
       <CardContent className="p-0 flex flex-col md:flex-row">
         
         {/* IMAGE SECTION */}
@@ -69,54 +77,56 @@ export function BookingCard({ booking, allowCancel }: BookingProps) {
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm p-4 text-center">
-              {/* Simple Icon for missing image */}
-              <svg className="w-8 h-8 mb-1 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
               <span className="text-xs font-medium">Image Not Available</span>
             </div>
           )}
         </div>
 
         {/* DETAILS SECTION */}
-        <div className="p-4 flex-1 flex flex-col justify-between">
+        <div className="p-4 flex-1 flex flex-col justify-between gap-3">
+          
+          {/* Header: Title & Badge */}
           <div className="flex flex-col md:flex-row justify-between items-start gap-2">
             <div>
-              <h3 className="font-bold text-lg text-gray-900 leading-tight">
+              <h3 className="font-bold text-lg text-slate-900 leading-tight line-clamp-1">
                 {displayTitle}
               </h3>
-              <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                📅 {new Date(displayDate).toLocaleDateString(undefined, { 
-                  weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
+              <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
+                📅 {new Date(displayDate).toLocaleDateString("en-US", { 
+                  weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: "Asia/Riyadh" 
                 })}
               </p>
             </div>
 
             <Badge
               className={
-                status === "cancelled" ? "bg-red-100 text-red-700 hover:bg-red-100" : 
-                (status === "confirmed" && !allowCancel) ? "bg-green-100 text-green-700 hover:bg-green-100" :
-                "bg-blue-100 text-blue-700 hover:bg-blue-100"
+                status === "cancelled" ? "bg-red-100 text-red-700 hover:bg-red-100 border-none" : 
+                (status === "confirmed" && !allowCancel) ? "bg-green-100 text-green-700 hover:bg-green-100 border-none" :
+                "bg-blue-100 text-blue-700 hover:bg-blue-100 border-none"
               }
               variant="secondary"
             >
-              {status === "confirmed" && !allowCancel ? "Completed" : status.toUpperCase()}
+              {status === "cancelled" ? "Cancelled" : (status === "confirmed" && !allowCancel ? "Completed" : "Confirmed")}
             </Badge>
           </div>
 
-          <div className="mt-4 flex justify-between items-end">
+          {/* Footer: Price & Actions */}
+          <div className="flex justify-between items-end border-t border-slate-100 pt-3">
             <div>
-              <p className="text-lg font-bold text-gray-900">
-                ${(displayPrice / 100).toFixed(2)}
+              <div className="flex items-center gap-2 text-sm text-slate-600 mb-0.5">
+                <Users className="w-4 h-4" />
+                <span>{count} ticket{count > 1 ? 's' : ''}</span>
+              </div>
+              <p className="text-xl font-bold text-slate-900">
+                ${(totalPrice / 100).toFixed(2)}
               </p>
-              <p className="text-xs text-gray-400">Ref: {_id.slice(-6)}</p>
             </div>
 
             {allowCancel && status === "confirmed" && (
               <Button
                 variant="outline"
                 size="sm"
-                className="text-red-600 border-red-200 hover:bg-red-50 h-8 text-xs"
+                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs"
                 onClick={handleCancel}
               >
                 Cancel Booking
