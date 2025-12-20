@@ -10,12 +10,11 @@ import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { CalendarIcon, MapPin, Ticket } from "lucide-react";
 
 export default function Home() {
-  // Use listUpcoming to hide past tours from the homepage
   const tours = useQuery(api.tours.listUpcoming);
   
+  // 1. We use 'isSignedIn' to check login status
   const { isSignedIn, isLoaded } = useUser();
 
-  // --- LOADING STATE ---
   if (tours === undefined || !isLoaded) {
     return (
       <main className="container mx-auto p-4 pt-20">
@@ -31,7 +30,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       
-      {/* --- NAVBAR --- */}
+      {/* --- NAVBAR (Unchanged) --- */}
       <nav className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
@@ -106,18 +105,21 @@ export default function Home() {
                     </div>
                   )}
                   
-                  {/* Status Badge */}
-                  <div className="absolute top-3 right-3">
-                    {isSoldOut ? (
-                      <Badge variant="destructive">Sold Out</Badge>
-                    ) : isLowStock ? (
-                      <Badge className="bg-orange-500 hover:bg-orange-600">Only {remaining} left!</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-white/90 text-slate-800 backdrop-blur-sm">
-                        Available
-                      </Badge>
-                    )}
-                  </div>
+                  {/* --- MODIFIED: STATUS BADGE (SPOTS LEFT) --- */}
+                  {/* Only render this div if user is signed in */}
+                  {isSignedIn && (
+                    <div className="absolute top-3 right-3">
+                      {isSoldOut ? (
+                        <Badge variant="destructive">Sold Out</Badge>
+                      ) : isLowStock ? (
+                        <Badge className="bg-orange-500 hover:bg-orange-600">Only {remaining} left!</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-white/90 text-slate-800 backdrop-blur-sm">
+                          Available
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* CONTENT AREA */}
@@ -137,11 +139,22 @@ export default function Home() {
                     {tour.description}
                   </p>
                   
+                  {/* --- MODIFIED: PRICE DISPLAY --- */}
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-slate-900">
-                      ${(tour.price / 100).toFixed(0)}
-                    </span>
-                    <span className="text-slate-400 text-sm">/ person</span>
+                    {isSignedIn ? (
+                      // Logged In: Show Price
+                      <>
+                        <span className="text-2xl font-bold text-slate-900">
+                          ${(tour.price / 100).toFixed(0)}
+                        </span>
+                        <span className="text-slate-400 text-sm">/ person</span>
+                      </>
+                    ) : (
+                      // Logged Out: Show prompt or blur
+                      <span className="text-sm font-medium text-slate-400 italic">
+                        Sign in to view price
+                      </span>
+                    )}
                   </div>
                 </CardContent>
 
@@ -152,7 +165,8 @@ export default function Home() {
                       className="w-full font-semibold shadow-sm" 
                       variant={isSoldOut ? "secondary" : "default"}
                     >
-                      {isSoldOut ? "View Details" : "Book Now"}
+                      {/* Optional: Change button text if not logged in */}
+                      {!isSignedIn ? "View Details" : (isSoldOut ? "View Details" : "Book Now")}
                     </Button>
                   </Link>
                 </CardFooter>
