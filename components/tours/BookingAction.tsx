@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useUser, SignInButton } from "@clerk/nextjs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Minus, Plus, Lock } from "lucide-react";
+import { Minus, Plus, Lock, ArrowLeft } from "lucide-react"; // Added ArrowLeft
+import Link from "next/link"; // Added Link
 
 interface BookingActionProps {
   tourId: Id<"tours">;
@@ -71,7 +72,7 @@ export function BookingAction({
         {/* Info Block */}
         <div className="space-y-3 text-sm">
           
-          {/* 1. PRICE ROW (Hidden if not logged in) */}
+          {/* PRICE ROW */}
           {isSignedIn ? (
             <div className="flex justify-between items-center border-b border-slate-200 pb-3">
               <span className="text-gray-600">Price per person</span>
@@ -86,13 +87,13 @@ export function BookingAction({
             </div>
           )}
           
-          {/* 2. DATE ROW (Always Visible) */}
+          {/* DATE ROW */}
           <div className="flex justify-between items-center">
             <span className="text-gray-600">Date</span>
             <span className="font-medium">{new Date(startDate).toLocaleDateString()}</span>
           </div>
           
-          {/* 3. AVAILABILITY ROW (Hidden if not logged in) */}
+          {/* AVAILABILITY ROW */}
           {isSignedIn && (
             <div className="flex justify-between items-center">
                <span className="text-gray-600">Availability</span>
@@ -154,24 +155,38 @@ export function BookingAction({
         )}
 
         {/* --- ACTION BUTTON --- */}
-        {!isLoaded ? (
-          <Button disabled className="w-full h-12">Loading...</Button>
-        ) : !isSignedIn ? (
-          <SignInButton mode="modal">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg">
-              Log in to View Price & Book
+        <div className="space-y-3">
+            {!isLoaded ? (
+            <Button disabled className="w-full h-12">Loading...</Button>
+            ) : !isSignedIn ? (
+            <SignInButton mode="modal">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg">
+                Log in to View Price & Book
+                </Button>
+            </SignInButton>
+            ) : (
+            <Button
+                size="lg"
+                className="w-full h-12 text-lg font-semibold"
+                onClick={handleBook}
+                disabled={isSoldOut || isSubmitting}
+            >
+                {isSubmitting ? "Processing..." : isSoldOut ? "Sold Out" : "Book Now"}
             </Button>
-          </SignInButton>
-        ) : (
-          <Button
-            size="lg"
-            className="w-full h-12 text-lg font-semibold"
-            onClick={handleBook}
-            disabled={isSoldOut || isSubmitting}
-          >
-            {isSubmitting ? "Processing..." : isSoldOut ? "Sold Out" : "Book Now"}
-          </Button>
-        )}
+            )}
+
+            {/* --- RETURN TO HOME BUTTON --- */}
+            <Link href="/" className="block">
+                <Button 
+                    variant="ghost" 
+                    className="w-full text-slate-500 hover:text-slate-800 hover:bg-slate-200/50"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Return to Home
+                </Button>
+            </Link>
+        </div>
+
       </CardContent>
     </Card>
   );
