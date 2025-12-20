@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
-import { CalendarIcon, MapPin, Ticket } from "lucide-react";
+import { CalendarIcon, MapPin, Ticket, Shield } from "lucide-react"; // Added Shield icon
 
 export default function Home() {
   const tours = useQuery(api.tours.listUpcoming);
   
-  // 1. We use 'isSignedIn' to check login status
+  // 1. Fetch current user from Convex to check for 'isAdmin' flag
+  const user = useQuery(api.users.current);
+  
+  // 2. Clerk hook for basic auth state
   const { isSignedIn, isLoaded } = useUser();
 
   if (tours === undefined || !isLoaded) {
@@ -30,7 +33,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       
-      {/* --- NAVBAR (Unchanged) --- */}
+      {/* --- NAVBAR --- */}
       <nav className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
@@ -46,6 +49,18 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-4">
+            
+            {/* --- ADMIN BUTTON (Only visible to admins) --- */}
+            {user?.role === "admin" && (
+              <Link href="/admin">
+                <Button variant="ghost" className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50">
+                  <Shield className="w-4 h-4 mr-2" />
+                  Admin
+                </Button>
+              </Link>
+            )}
+
+            {/* --- MY BOOKINGS BUTTON --- */}
             {isSignedIn && (
               <Link href="/my-bookings">
                 <Button variant="ghost" className="text-sm font-medium">
@@ -55,6 +70,7 @@ export default function Home() {
               </Link>
             )}
 
+            {/* --- USER PROFILE / LOGIN --- */}
             <div className="pl-2 border-l">
               {isSignedIn ? (
                 <UserButton afterSignOutUrl="/" />
@@ -105,8 +121,7 @@ export default function Home() {
                     </div>
                   )}
                   
-                  {/* --- MODIFIED: STATUS BADGE (SPOTS LEFT) --- */}
-                  {/* Only render this div if user is signed in */}
+                  {/* STATUS BADGE (Only for logged in users) */}
                   {isSignedIn && (
                     <div className="absolute top-3 right-3">
                       {isSoldOut ? (
@@ -139,7 +154,7 @@ export default function Home() {
                     {tour.description}
                   </p>
                   
-                  {/* --- MODIFIED: PRICE DISPLAY --- */}
+                  {/* PRICE DISPLAY */}
                   <div className="flex items-baseline gap-1">
                     {isSignedIn ? (
                       // Logged In: Show Price
@@ -150,7 +165,7 @@ export default function Home() {
                         <span className="text-slate-400 text-sm">/ person</span>
                       </>
                     ) : (
-                      // Logged Out: Show prompt or blur
+                      // Logged Out: Show prompt
                       <span className="text-sm font-medium text-slate-400 italic">
                         Sign in to view price
                       </span>
@@ -165,7 +180,6 @@ export default function Home() {
                       className="w-full font-semibold shadow-sm" 
                       variant={isSoldOut ? "secondary" : "default"}
                     >
-                      {/* Optional: Change button text if not logged in */}
                       {!isSignedIn ? "View Details" : (isSoldOut ? "View Details" : "Book Now")}
                     </Button>
                   </Link>
