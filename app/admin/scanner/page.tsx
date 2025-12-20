@@ -119,7 +119,6 @@ export default function AdminScanner() {
                         onScan={handleScan}
                         formats={['qr_code']}
                         components={{
-                            audio: false, // Turn off default beep if you want
                             finder: true, // Shows the little scanning box
                         }}
                     />
