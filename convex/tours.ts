@@ -12,14 +12,10 @@ function getKsaToday() {
   return new Date(`${ksaString}T00:00:00+03:00`).getTime();
 }
 
-// 1. ADMIN LIST (Shows ALL tours, even past ones, so you can manage them)
+// 1. ADMIN LIST (Shows ALL tours, even past ones)
 export const list = query({
   handler: async (ctx) => {
     const tours = await ctx.db.query("tours").collect();
-
-    // Filter out soft-deleted tours if you implemented that previously
-    // const activeTours = tours.filter(t => !t.isDeleted); 
-
     return await Promise.all(
       tours.map(async (tour) => ({
         ...tour,
@@ -92,8 +88,6 @@ export const create = mutation({
 
     const ksaToday = getKsaToday();
 
-    // We allow a small buffer (e.g., creating a tour for "today" is okay)
-    // but strictly speaking, args.startDate (00:00 KSA) should be >= ksaToday
     if (args.startDate < ksaToday) {
       throw new ConvexError("Cannot create a tour in the past (Saudi Time).");
     }
@@ -110,7 +104,7 @@ export const create = mutation({
   },
 });
 
-// 4. BOOK TOUR
+// 4. BOOK TOUR (Corrected)
 export const book = mutation({
   args: {
     tourId: v.id("tours"),
@@ -121,7 +115,6 @@ export const book = mutation({
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
 
-    // OPTIONAL: Prevent booking if the tour has already started/passed
     if (tour.startDate < Date.now()) {
       throw new ConvexError("This tour has already started or ended.");
     }
@@ -140,6 +133,8 @@ export const book = mutation({
       tourTitle: tour.title,
       tourDate: tour.startDate,
       tourPrice: tour.price,
+      paymentMethod: "transfer", 
+      paymentStatus: "paid", 
     });
 
     await ctx.db.patch(tour._id, {
@@ -198,7 +193,6 @@ export const update = mutation({
     const tour = await ctx.db.get(id);
     if (!tour) throw new ConvexError("Tour not found");
 
-    // VALIDATION: Prevent updating to a past date
     if (fields.startDate) {
       const ksaToday = getKsaToday();
       if (fields.startDate < ksaToday) {
