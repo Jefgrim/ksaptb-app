@@ -10,6 +10,8 @@
 
 import type * as auth from "../auth.js";
 import type * as bookings from "../bookings.js";
+import type * as crons from "../crons.js";
+import type * as stripe from "../stripe.js";
 import type * as tours from "../tours.js";
 import type * as users from "../users.js";
 
@@ -22,6 +24,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bookings: typeof bookings;
+  crons: typeof crons;
+  stripe: typeof stripe;
   tours: typeof tours;
   users: typeof users;
 }>;

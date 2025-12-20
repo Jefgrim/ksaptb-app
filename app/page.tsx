@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { CalendarIcon, MapPin, Ticket, Shield } from "lucide-react"; // Added Shield icon
+import { formatDate } from "@/lib/utils";
 
 export default function Home() {
   const tours = useQuery(api.tours.listUpcoming);
@@ -141,9 +142,7 @@ export default function Home() {
                 <CardContent className="flex-1 p-5">
                   <div className="flex items-center text-sm text-blue-600 font-medium mb-2">
                     <CalendarIcon className="w-4 h-4 mr-1.5" />
-                    {new Date(tour.startDate).toLocaleDateString("en-US", {
-                      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: "Asia/Riyadh"
-                    })}
+                    {formatDate(tour.startDate)}
                   </div>
 
                   <h3 className="text-xl font-bold text-slate-900 mb-2 line-clamp-1">
