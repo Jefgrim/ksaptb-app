@@ -48,7 +48,7 @@ export default function TourDetail() {
           
           <div>
             <h1 className="text-3xl font-bold mb-4">{tour.title}</h1>
-            <div className="prose max-w-none text-gray-700 leading-relaxed whitespace-pre-line">
+            <div className="prose max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap">
               {tour.description}
             </div>
           </div>

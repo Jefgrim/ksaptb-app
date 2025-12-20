@@ -11,10 +11,10 @@ import { CalendarIcon, MapPin, Ticket, Shield } from "lucide-react"; // Added Sh
 
 export default function Home() {
   const tours = useQuery(api.tours.listUpcoming);
-  
+
   // 1. Fetch current user from Convex to check for 'isAdmin' flag
   const user = useQuery(api.users.current);
-  
+
   // 2. Clerk hook for basic auth state
   const { isSignedIn, isLoaded } = useUser();
 
@@ -32,7 +32,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
-      
+
       {/* --- NAVBAR --- */}
       <nav className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -49,7 +49,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-4">
-            
+
             {/* --- ADMIN BUTTON (Only visible to admins) --- */}
             {user?.role === "admin" && (
               <Link href="/admin">
@@ -103,8 +103,8 @@ export default function Home() {
             const isLowStock = remaining > 0 && remaining <= 5;
 
             return (
-              <Card 
-                key={tour._id} 
+              <Card
+                key={tour._id}
                 className="group flex flex-col overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-white"
               >
                 {/* IMAGE AREA */}
@@ -120,7 +120,7 @@ export default function Home() {
                       <MapPin className="h-10 w-10 opacity-20" />
                     </div>
                   )}
-                  
+
                   {/* STATUS BADGE (Only for logged in users) */}
                   {isSignedIn && (
                     <div className="absolute top-3 right-3">
@@ -150,17 +150,17 @@ export default function Home() {
                     {tour.title}
                   </h3>
 
-                  <p className="text-slate-500 text-sm line-clamp-2 leading-relaxed mb-4">
+                  <p className="text-slate-500 text-sm line-clamp-2 leading-relaxed mb-4 whitespace-pre-wrap">
                     {tour.description}
                   </p>
-                  
+
                   {/* PRICE DISPLAY */}
                   <div className="flex items-baseline gap-1">
                     {isSignedIn ? (
                       // Logged In: Show Price
                       <>
                         <span className="text-2xl font-bold text-slate-900">
-                          ${(tour.price / 100).toFixed(0)}
+                          SAR {(tour.price / 100).toFixed(0)}
                         </span>
                         <span className="text-slate-400 text-sm">/ person</span>
                       </>
@@ -176,8 +176,8 @@ export default function Home() {
                 {/* FOOTER AREA */}
                 <CardFooter className="p-5 pt-0 mt-auto">
                   <Link href={`/tours/${tour._id}`} className="w-full">
-                    <Button 
-                      className="w-full font-semibold shadow-sm" 
+                    <Button
+                      className="w-full font-semibold shadow-sm"
                       variant={isSoldOut ? "secondary" : "default"}
                     >
                       {!isSignedIn ? "View Details" : (isSoldOut ? "View Details" : "Book Now")}
@@ -188,7 +188,7 @@ export default function Home() {
             );
           })}
         </div>
-        
+
         {tours?.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             No upcoming tours available. Check back soon!

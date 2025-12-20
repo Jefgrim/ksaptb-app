@@ -118,7 +118,7 @@ export function BookingCard({ booking, allowCancel }: BookingProps) {
                 <span>{count} ticket{count > 1 ? 's' : ''}</span>
               </div>
               <p className="text-xl font-bold text-slate-900">
-                ${(totalPrice / 100).toFixed(2)}
+                SAR {(totalPrice / 100).toFixed(2)}
               </p>
             </div>
 

@@ -98,6 +98,10 @@ export const create = mutation({
       throw new ConvexError("Cannot create a tour in the past (Saudi Time).");
     }
 
+    if (args.price <= 0) {
+      throw new ConvexError("Price must be greater than 0.");
+    }
+
     return await ctx.db.insert("tours", {
       ...args,
       bookedCount: 0,
@@ -200,6 +204,10 @@ export const update = mutation({
       if (fields.startDate < ksaToday) {
         throw new ConvexError("Cannot move a tour to the past (Saudi Time).");
       }
+    }
+
+    if (fields.price !== undefined && fields.price <= 0) {
+      throw new ConvexError("Price must be greater than 0.");
     }
 
     if (fields.coverImageId && tour.coverImageId && fields.coverImageId !== tour.coverImageId) {
