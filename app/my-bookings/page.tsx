@@ -37,8 +37,11 @@ export default function MyBookings() {
   const now = Date.now();
 
   // --- FIX HERE: Include "pending" status ---
+  // ... inside your component
+
   const upcoming = sortedData.filter(
     (b) =>
+      // "reviewing" is covered by "pending" here
       (b.status === "confirmed" || b.status === "pending" || b.status === "holding") &&
       (b.tour?.startDate || 0) >= now
   );
@@ -48,7 +51,10 @@ export default function MyBookings() {
   );
 
   const cancelled = sortedData.filter(
-    (b) => b.status === "cancelled");
+    (b) =>
+      // "rejected" is covered by "cancelled" here
+      b.status === "cancelled" || b.status === "expired"
+  );
 
   // Helper to count pending bookings for a badge (optional)
   const pendingCount = upcoming.filter(b => b.status === "pending").length;
