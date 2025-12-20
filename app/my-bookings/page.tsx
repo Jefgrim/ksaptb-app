@@ -39,7 +39,7 @@ export default function MyBookings() {
   // --- FIX HERE: Include "pending" status ---
   const upcoming = sortedData.filter(
     (b) =>
-      (b.status === "confirmed" || b.status === "pending" || b.status === "holding" || b.status === "reviewing") &&
+      (b.status === "confirmed" || b.status === "pending" || b.status === "holding") &&
       (b.tour?.startDate || 0) >= now
   );
 
@@ -48,8 +48,7 @@ export default function MyBookings() {
   );
 
   const cancelled = sortedData.filter(
-    (b) => b.status === "cancelled" || b.status === "rejected" // Also show rejected
-  );
+    (b) => b.status === "cancelled");
 
   // Helper to count pending bookings for a badge (optional)
   const pendingCount = upcoming.filter(b => b.status === "pending").length;
