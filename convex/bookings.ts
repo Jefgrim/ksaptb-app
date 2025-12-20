@@ -70,7 +70,7 @@ export const cancelBooking = mutation({
     const tour = await ctx.db.get(booking.tourId);
     if (tour) {
       await ctx.db.patch(tour._id, {
-        bookedCount: Math.max(0, tour.bookedCount - 1),
+        bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount),
       });
     }
   },
