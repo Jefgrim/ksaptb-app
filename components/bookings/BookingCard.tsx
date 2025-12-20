@@ -1,140 +1,256 @@
-"use client";
-
-import { Card, CardContent } from "@/components/ui/card";
+import { Id } from "@/convex/_generated/dataModel";
+import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
-import { Id } from "@/convex/_generated/dataModel";
-import { Users } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { CalendarDays, MapPin, Users, Wallet, Clock, XCircle, CheckCircle2, QrCode, ArrowRight, AlertTriangle, Ticket } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 
-interface BookingProps {
-  booking: {
-    _id: Id<"bookings">;
-    status: string;
-    ticketCount: number; // Added ticketCount
-    
-    // Snapshot fields
-    tourTitle: string;
-    tourDate: number;
-    tourPrice: number;
-
-    // The "Live" relation
-    tour: {
-      title: string;
-      startDate: number;
-      price: number;
-      imageUrl: string | null;
-    } | null;
-  };
-  allowCancel: boolean;
+interface BookingCardProps {
+  booking: any;
+  onCancel?: (id: Id<"bookings">) => void;
+  isPast?: boolean;
 }
 
-export function BookingCard({ booking, allowCancel }: BookingProps) {
-  const cancel = useMutation(api.bookings.cancelBooking);
+export function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
   
-  // Destructure everything including ticketCount
-  const { tour, status, _id, tourTitle, tourDate, tourPrice, ticketCount } = booking;
-
-  // --- INTEGRITY FIX ---
-  // We prioritize the SNAPSHOT data (saved at booking time).
-  // We only fallback to 'tour.*' (live data) if the snapshot is missing.
-  
-  const displayTitle = tourTitle || tour?.title || "Unknown Tour";
-  const displayDate = tourDate || tour?.startDate || Date.now();
-  
-  // Price Logic: Use snapshot price, fallback to live, default to 0
-  const unitPrice = tourPrice !== undefined ? tourPrice : (tour?.price || 0);
-  const count = ticketCount || 1;
-  const totalPrice = unitPrice * count;
-
-  // Image Logic: We still use the live image (images are rarely snapshotted due to size)
-  const displayImage = tour?.imageUrl; 
-
-  const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel this booking?")) return;
-    try {
-      await cancel({ bookingId: _id });
-      toast.success("Booking cancelled successfully");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to cancel booking");
+  // --- STATUS CONFIGURATION ---
+  const statusConfig = {
+    holding: {
+        label: "Payment Needed",
+        color: "bg-amber-100 text-amber-800 border-amber-200",
+        icon: AlertTriangle
+    },
+    pending: {
+        label: "Verifying Payment",
+        color: "bg-blue-100 text-blue-800 border-blue-200",
+        icon: Clock
+    },
+    reviewing: {
+        label: "Verifying Payment",
+        color: "bg-blue-100 text-blue-800 border-blue-200",
+        icon: Clock
+    },
+    confirmed: {
+        label: "Confirmed",
+        color: "bg-green-100 text-green-800 border-green-200",
+        icon: CheckCircle2
+    },
+    cancelled: {
+        label: "Cancelled",
+        color: "bg-red-100 text-red-800 border-red-200",
+        icon: XCircle
+    },
+    rejected: {
+        label: "Payment Rejected",
+        color: "bg-red-100 text-red-800 border-red-200",
+        icon: XCircle
+    },
+    expired: {
+        label: "Expired",
+        color: "bg-slate-100 text-slate-500 border-slate-200",
+        icon: XCircle
+    },
+    completed: {
+        label: "Completed",
+        color: "bg-slate-100 text-slate-800 border-slate-200",
+        icon: CheckCircle2
     }
   };
 
+  const statusKey = (isPast ? "completed" : booking.status) as keyof typeof statusConfig;
+  const status = statusConfig[statusKey] || statusConfig.pending;
+  const StatusIcon = status.icon;
+
+  // Calculate Price
+  const rawTotal = booking.totalPrice || (booking.tourPrice * booking.ticketCount);
+  const totalPaid = rawTotal / 100;
+  const refId = booking._id.slice(-8).toUpperCase(); // Short Ref ID
+
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow bg-white border-slate-200">
-      <CardContent className="p-0 flex flex-col md:flex-row">
+    <Card className="overflow-hidden border-slate-200 hover:shadow-md transition-all duration-200 group bg-white">
+      <div className="flex flex-col md:flex-row">
         
-        {/* IMAGE SECTION */}
-        <div className="w-full md:w-48 h-32 relative bg-gray-100 shrink-0 border-r border-gray-100">
-          {displayImage ? (
-            <img
-              src={displayImage}
-              alt={displayTitle}
-              className="w-full h-full object-cover"
+        {/* --- LEFT: IMAGE --- */}
+        <div className="relative w-full md:w-56 h-48 md:h-auto shrink-0 bg-slate-100">
+          {booking.tour?.imageUrl ? (
+            <Image 
+              src={booking.tour.imageUrl} 
+              alt={booking.tourTitle} 
+              fill
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm p-4 text-center">
-              <span className="text-xs font-medium">Image Not Available</span>
+            <div className="flex items-center justify-center h-full text-slate-300">
+              <MapPin className="w-10 h-10" />
             </div>
           )}
-        </div>
-
-        {/* DETAILS SECTION */}
-        <div className="p-4 flex-1 flex flex-col justify-between gap-3">
           
-          {/* Header: Title & Badge */}
-          <div className="flex flex-col md:flex-row justify-between items-start gap-2">
-            <div>
-              <h3 className="font-bold text-lg text-slate-900 leading-tight line-clamp-1">
-                {displayTitle}
-              </h3>
-              <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
-                📅 {new Date(displayDate).toLocaleDateString("en-US", { 
-                  weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: "Asia/Riyadh" 
-                })}
-              </p>
-            </div>
-
-            <Badge
-              className={
-                status === "cancelled" ? "bg-red-100 text-red-700 hover:bg-red-100 border-none" : 
-                (status === "confirmed" && !allowCancel) ? "bg-green-100 text-green-700 hover:bg-green-100 border-none" :
-                "bg-blue-100 text-blue-700 hover:bg-blue-100 border-none"
-              }
-              variant="secondary"
-            >
-              {status === "cancelled" ? "Cancelled" : (status === "confirmed" && !allowCancel ? "Completed" : "Confirmed")}
+          {/* Mobile Status Badge Overlay */}
+          <div className="absolute top-2 left-2 md:hidden">
+            <Badge variant="outline" className={`whitespace-nowrap shadow-sm backdrop-blur-md ${status.color}`}>
+               <StatusIcon className="w-3 h-3 mr-1"/>
+               {status.label}
             </Badge>
           </div>
+        </div>
 
-          {/* Footer: Price & Actions */}
-          <div className="flex justify-between items-end border-t border-slate-100 pt-3">
+        {/* --- RIGHT: CONTENT --- */}
+        <div className="flex-1 flex flex-col p-5">
+          
+          {/* Header Row */}
+          <div className="flex justify-between items-start gap-4 mb-3">
             <div>
-              <div className="flex items-center gap-2 text-sm text-slate-600 mb-0.5">
-                <Users className="w-4 h-4" />
-                <span>{count} ticket{count > 1 ? 's' : ''}</span>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                 REF: {refId}
               </div>
-              <p className="text-xl font-bold text-slate-900">
-                SAR {(totalPrice / 100).toFixed(2)}
-              </p>
+              <h3 className="font-bold text-lg text-slate-900 leading-tight">{booking.tourTitle}</h3>
+            </div>
+            
+            {/* Desktop Status Badge */}
+            <div className="hidden md:block">
+                <Badge variant="outline" className={`whitespace-nowrap ${status.color}`}>
+                    <StatusIcon className="w-3 h-3 mr-1"/>
+                    {status.label}
+                </Badge>
+            </div>
+          </div>
+
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-2 py-4 border-t border-b border-dashed border-slate-200 my-1">
+             
+             {/* Date */}
+             <div>
+               <div className="flex items-center text-slate-400 text-xs uppercase font-bold mb-1">
+                 <CalendarDays className="w-3 h-3 mr-1" /> Date
+               </div>
+               <div className="text-sm font-medium text-slate-700">
+                 {formatDateTime(booking.tourDate)}
+               </div>
+             </div>
+
+             {/* Guests */}
+             <div>
+               <div className="flex items-center text-slate-400 text-xs uppercase font-bold mb-1">
+                 <Users className="w-3 h-3 mr-1" /> Guests
+               </div>
+               <div className="text-sm font-medium text-slate-700">
+                 {booking.ticketCount} Person(s)
+               </div>
+             </div>
+
+             {/* Price */}
+             <div>
+               <div className="flex items-center text-slate-400 text-xs uppercase font-bold mb-1">
+                 <Wallet className="w-3 h-3 mr-1" /> Total Paid
+               </div>
+               <div className="text-sm font-bold text-emerald-700">
+                 SAR {totalPaid.toFixed(2)}
+               </div>
+             </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="mt-4 flex flex-wrap gap-3 items-center justify-between">
+            
+            {/* Left: Cancel Option */}
+            <div>
+                {onCancel && booking.status !== "cancelled" && booking.status !== "expired" && booking.status !== "completed" && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => onCancel(booking._id)}
+                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 -ml-2 h-8 text-xs"
+                    >
+                        Cancel Reservation
+                    </Button>
+                )}
             </div>
 
-            {allowCancel && status === "confirmed" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 text-xs"
-                onClick={handleCancel}
-              >
-                Cancel Booking
-              </Button>
-            )}
+            {/* Right: Primary Actions */}
+            <div className="flex gap-2 w-full md:w-auto">
+                
+                {/* CASE 1: HOLDING (Need to Pay) */}
+                {booking.status === "holding" && (
+                    <Link href={`/tours/${booking.tourId}`} className="w-full md:w-auto">
+                        <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white gap-2 shadow-sm shadow-amber-200">
+                            Continue Payment <ArrowRight className="w-4 h-4" />
+                        </Button>
+                    </Link>
+                )}
+
+                {/* CASE 2: CONFIRMED (Show Ticket) */}
+                {booking.status === "confirmed" && (
+                     <Dialog>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" className="w-full md:w-auto border-slate-300 gap-2">
+                                <QrCode className="w-4 h-4 text-slate-600" /> View Tickets
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle className="text-center">Your E-Tickets</DialogTitle>
+                                <DialogDescription className="text-center">
+                                    Please present these {booking.ticketCount} QR codes at the entrance.
+                                </DialogDescription>
+                            </DialogHeader>
+                            
+                            <div className="space-y-8 py-4">
+                                {Array.from({ length: booking.ticketCount }).map((_, index) => {
+                                    // Unique Data for this specific guest ticket
+                                    const ticketNumber = index + 1;
+                                    const uniqueQrData = `${booking._id}-${ticketNumber}`;
+                                    
+                                    return (
+                                        <div key={index} className="flex flex-col items-center justify-center space-y-3 pb-8 border-b last:border-0 border-dashed border-slate-200">
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-800 uppercase tracking-wider">
+                                                <Ticket className="w-4 h-4" />
+                                                Guest #{ticketNumber}
+                                            </div>
+
+                                            <div className="bg-white p-4 rounded-xl border-2 border-slate-900 shadow-sm">
+                                                {/* Uses a public API to generate scannable QR images instantly */}
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img 
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${uniqueQrData}`}
+                                                    alt={`Ticket ${ticketNumber}`}
+                                                    className="w-40 h-40 mix-blend-multiply"
+                                                />
+                                            </div>
+                                            
+                                            <div className="text-center">
+                                                <p className="text-[10px] text-slate-400 font-mono">
+                                                    ID: {refId}-{ticketNumber}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                        </DialogContent>
+                    </Dialog>
+                )}
+
+                {/* CASE 3: PENDING (Just a note) */}
+                {(booking.status === "pending" || booking.status === "reviewing") && (
+                     <Button disabled variant="secondary" className="w-full md:w-auto opacity-80 cursor-not-allowed">
+                        <Clock className="w-4 h-4 mr-2" /> Awaiting Confirmation
+                     </Button>
+                )}
+            </div>
           </div>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

@@ -51,6 +51,8 @@ export default defineSchema({
 
     // NEW: When does the hold expire?
     expiresAt: v.optional(v.number()),
+
+    redeemedTickets: v.optional(v.array(v.number())),
   })
     .index("by_tour", ["tourId"])
     .index("by_user", ["userId"])

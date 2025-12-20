@@ -6,12 +6,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookingList } from "@/components/bookings/BookingList";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock } from "lucide-react"; // Added Clock Icon
 
 export default function MyBookings() {
   const data = useQuery(api.bookings.getMyBookings);
 
-  // 1. Loading State (With Back Button included so users aren't trapped)
   if (!data) {
     return (
       <div className="container mx-auto p-4 md:p-10">
@@ -30,15 +29,18 @@ export default function MyBookings() {
     );
   }
 
-  // 2. Sort & Filter Data
-  const sortedData = [...data].sort((a, b) => 
+  // Sort by date
+  const sortedData = [...data].sort((a, b) =>
     (b.tour?.startDate || 0) - (a.tour?.startDate || 0)
   );
 
   const now = Date.now();
-  
+
+  // --- FIX HERE: Include "pending" status ---
   const upcoming = sortedData.filter(
-    (b) => b.status === "confirmed" && (b.tour?.startDate || 0) >= now
+    (b) =>
+      (b.status === "confirmed" || b.status === "pending" || b.status === "holding" || b.status === "reviewing") &&
+      (b.tour?.startDate || 0) >= now
   );
 
   const past = sortedData.filter(
@@ -46,17 +48,19 @@ export default function MyBookings() {
   );
 
   const cancelled = sortedData.filter(
-    (b) => b.status === "cancelled"
+    (b) => b.status === "cancelled" || b.status === "rejected" // Also show rejected
   );
+
+  // Helper to count pending bookings for a badge (optional)
+  const pendingCount = upcoming.filter(b => b.status === "pending").length;
 
   return (
     <div className="container mx-auto p-4 md:p-10">
-      
-      {/* --- HEADER SECTION --- */}
+
+      {/* --- HEADER --- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-3xl font-bold text-slate-900">My Trips</h1>
-        
-        {/* Return Button */}
+
         <Link href="/">
           <Button variant="outline" className="w-full md:w-auto gap-2 border-slate-300">
             <ArrowLeft className="w-4 h-4" />
@@ -64,6 +68,16 @@ export default function MyBookings() {
           </Button>
         </Link>
       </div>
+
+      {/* --- PENDING STATUS NOTICE (Optional but helpful) --- */}
+      {pendingCount > 0 && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center gap-3 text-blue-800">
+          <Clock className="w-5 h-5 text-blue-600" />
+          <p className="text-sm">
+            You have <strong>{pendingCount} pending booking(s)</strong> awaiting payment verification.
+          </p>
+        </div>
+      )}
 
       <Tabs defaultValue="upcoming" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-8">
@@ -73,26 +87,26 @@ export default function MyBookings() {
         </TabsList>
 
         <TabsContent value="upcoming">
-          <BookingList 
-            list={upcoming} 
-            allowCancel={true} 
-            emptyMessage="You have no upcoming trips booked." 
+          <BookingList
+            list={upcoming}
+            allowCancel={true}
+            emptyMessage="You have no upcoming trips booked."
           />
         </TabsContent>
 
         <TabsContent value="past">
-          <BookingList 
-            list={past} 
-            allowCancel={false} 
-            emptyMessage="You haven't completed any trips yet." 
+          <BookingList
+            list={past}
+            allowCancel={false}
+            emptyMessage="You haven't completed any trips yet."
           />
         </TabsContent>
 
         <TabsContent value="cancelled">
-          <BookingList 
-            list={cancelled} 
-            allowCancel={false} 
-            emptyMessage="No cancelled bookings found." 
+          <BookingList
+            list={cancelled}
+            allowCancel={false}
+            emptyMessage="No cancelled bookings found."
           />
         </TabsContent>
       </Tabs>

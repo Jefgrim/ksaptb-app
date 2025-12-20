@@ -5,12 +5,13 @@ import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea"; // <--- CHANGED IMPORT
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-import { Loader2, CreditCard, Landmark, Upload, Info, Timer } from "lucide-react";
+import { Loader2, CreditCard, Landmark, Upload, Info, Timer, X, FileImage, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
   // --- CONVEX HOOKS ---
   const reserveBooking = useMutation(api.bookings.reserve);
   const confirmBooking = useMutation(api.bookings.confirm);
+  const cancelBooking = useMutation(api.bookings.cancelBooking);
   const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
   const createStripeSession = useAction(api.stripe.createCheckoutSession);
   
@@ -47,6 +49,8 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
   const [timeLeft, setTimeLeft] = useState<string>("");
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const remaining = capacity - bookedCount;
@@ -88,6 +92,21 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
 
 
   // --- HANDLERS ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        setSelectedFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if(fileInput.current) fileInput.current.value = "";
+  };
+
   const handleReserve = async () => {
     setIsProcessing(true);
     try {
@@ -105,11 +124,29 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
     }
   };
 
+  const handleCancelReservation = async () => {
+    if(!bookingId) return;
+    setIsProcessing(true);
+    try {
+        await cancelBooking({ bookingId });
+        setBookingId(null);
+        setExpiresAt(null);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setStep("details");
+        toast.success("Reservation cancelled");
+    } catch (error) {
+        toast.error("Failed to cancel reservation");
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
   const handleConfirm = async () => {
     if (!bookingId) return;
 
     if (paymentMethod === "transfer") {
-        if (!fileInput.current?.files?.[0]) {
+        if (!selectedFile) {
             toast.error("Please select an image file.");
             return;
         }
@@ -133,18 +170,15 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
             return;
         }
 
-        // Upload Proof
-        const file = fileInput.current!.files![0];
         const postUrl = await generateUploadUrl();
         const uploadRes = await fetch(postUrl, {
             method: "POST",
-            headers: { "Content-Type": file.type },
-            body: file,
+            headers: { "Content-Type": selectedFile!.type },
+            body: selectedFile,
         });
         if(!uploadRes.ok) throw new Error("Upload failed");
         const { storageId } = await uploadRes.json();
 
-        // Confirm
         await confirmBooking({
             bookingId,
             paymentMethod: "transfer",
@@ -153,8 +187,6 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
         });
 
         toast.success("Proof submitted successfully!");
-        
-        // --- FIXED REDIRECT HERE ---
         router.push("/my-bookings"); 
 
     } catch (error: any) {
@@ -179,7 +211,6 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
             <div>
                 <CardTitle>Book This Tour</CardTitle>
                 <CardDescription>
-                    {/* Using the KSA Date Helper */}
                     {formatDate(startDate)}
                 </CardDescription>
             </div>
@@ -214,9 +245,19 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
                     <span>SAR {displayPrice.toFixed(2)}</span>
                 </div>
 
-                <Button onClick={handleReserve} disabled={isProcessing} className="w-full h-12 text-lg">
-                    {isProcessing ? <Loader2 className="animate-spin mr-2"/> : "Reserve Spot"}
-                </Button>
+                <div className="flex flex-col gap-3">
+                    <Button onClick={handleReserve} disabled={isProcessing} className="w-full h-12 text-lg">
+                        {isProcessing ? <Loader2 className="animate-spin mr-2"/> : "Reserve Spot"}
+                    </Button>
+                    
+                    <Button 
+                        variant="ghost" 
+                        className="w-full text-slate-500"
+                        onClick={() => router.back()}
+                    >
+                       <ArrowLeft className="w-4 h-4 mr-2" /> Return
+                    </Button>
+                </div>
             </div>
         )}
 
@@ -231,6 +272,7 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
                     <Label className="text-xs font-bold uppercase text-slate-500">Payment Method</Label>
                     {ENABLE_STRIPE ? (
                         <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                            {/* ... Stripe Options ... */}
                             <div className="flex items-center space-x-2 border p-3 rounded-lg">
                                 <RadioGroupItem value="stripe" id="stripe" />
                                 <Label htmlFor="stripe" className="flex items-center gap-2"><CreditCard className="w-4 h-4"/> Credit Card</Label>
@@ -258,25 +300,72 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
                             </div>
                         </div>
 
+                        {/* --- REPLACED INPUT WITH TEXTAREA --- */}
                         <div className="space-y-1">
-                            <Label className="text-xs font-bold">Your Refund IBAN <span className="text-red-500">*</span></Label>
-                            <Input placeholder="SA..." value={refundDetails} onChange={(e) => setRefundDetails(e.target.value)}/>
+                            <Label className="text-xs font-bold">Your Refund Details (IBAN, Name) <span className="text-red-500">*</span></Label>
+                            <Textarea 
+                                placeholder="Bank Name: ...&#10;Account Name: ...&#10;IBAN: SA..." 
+                                value={refundDetails} 
+                                onChange={(e) => setRefundDetails(e.target.value)}
+                                className="min-h-[100px]"
+                            />
                         </div>
 
                         <div 
-                            className="border-2 border-dashed border-slate-300 p-6 rounded-xl text-center hover:bg-slate-50 cursor-pointer"
-                            onClick={() => fileInput.current?.click()}
+                            className={`relative border-2 border-dashed p-4 rounded-xl text-center transition-colors cursor-pointer group 
+                                ${selectedFile ? 'border-green-300 bg-green-50' : 'border-slate-300 hover:bg-slate-50'}`}
+                            onClick={() => !selectedFile && fileInput.current?.click()}
                         >
-                            <Input type="file" ref={fileInput} accept="image/*" className="hidden" />
-                            <Upload className="mx-auto h-8 w-8 text-slate-400 mb-2"/>
-                            <p className="text-sm font-medium text-slate-600">Upload Receipt Screenshot</p>
+                            <Input type="file" ref={fileInput} accept="image/*" className="hidden" onChange={handleFileSelect} />
+                            
+                            {selectedFile ? (
+                                <div className="flex items-center gap-3 text-left">
+                                    {previewUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={previewUrl} alt="Preview" className="w-12 h-12 rounded object-cover bg-slate-200 shrink-0" />
+                                    ) : (
+                                        <FileImage className="w-8 h-8 text-green-600" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-green-800 truncate">{selectedFile.name}</p>
+                                        <p className="text-xs text-green-600">Ready to upload</p>
+                                    </div>
+                                    <Button 
+                                        variant="ghost" size="icon" 
+                                        className="text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                        onClick={handleRemoveFile}
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="py-4">
+                                    <Upload className="mx-auto h-8 w-8 text-slate-400 mb-2 group-hover:text-slate-600 transition-colors"/>
+                                    <p className="text-sm font-medium text-slate-600">Click to Upload Receipt</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
-                <Button onClick={handleConfirm} disabled={isProcessing} className="w-full h-12 text-lg">
-                    {isProcessing ? <Loader2 className="animate-spin mr-2"/> : (paymentMethod === "stripe" ? "Pay Now" : "Confirm Payment")}
-                </Button>
+                <div className="flex gap-3 flex-col-reverse sm:flex-row">
+                    <Button 
+                        variant="outline" 
+                        onClick={handleCancelReservation} 
+                        disabled={isProcessing}
+                        className="flex-1 h-12 text-slate-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100"
+                    >
+                        Cancel
+                    </Button>
+                    
+                    <Button 
+                        onClick={handleConfirm} 
+                        disabled={isProcessing} 
+                        className="flex-1 h-12 text-lg"
+                    >
+                        {isProcessing ? <Loader2 className="animate-spin mr-2"/> : (paymentMethod === "stripe" ? "Pay Now" : "Confirm")}
+                    </Button>
+                </div>
             </div>
         )}
 

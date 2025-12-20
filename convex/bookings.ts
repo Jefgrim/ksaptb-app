@@ -24,9 +24,9 @@ export const getMyBookings = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Filter out "holding" or "expired" from the main dashboard list
+    // Filter out "expired" from the main dashboard list
     // We only want to show real bookings here
-    const visibleBookings = bookings.filter(b => b.status !== "holding" && b.status !== "expired");
+    const visibleBookings = bookings.filter(b => b.status !== "expired");
 
     const bookingsWithTour = await Promise.all(
       visibleBookings.map(async (booking) => {
@@ -55,16 +55,16 @@ export const getMyActiveHolding = query({
 
     // Find a booking for this user + tour that is "holding" and NOT expired
     const holding = await ctx.db
-        .query("bookings")
-        .withIndex("by_user", (q) => q.eq("userId", user._id))
-        .filter((q) => 
-            q.and(
-                q.eq(q.field("tourId"), args.tourId),
-                q.eq(q.field("status"), "holding"),
-                q.gt(q.field("expiresAt"), now) // Must still have time left
-            )
+      .query("bookings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("tourId"), args.tourId),
+          q.eq(q.field("status"), "holding"),
+          q.gt(q.field("expiresAt"), now) // Must still have time left
         )
-        .first();
+      )
+      .first();
 
     return holding; // Returns null if no active session
   }
@@ -78,7 +78,7 @@ export const getAllBookings = query({
       _id: b._id,
       status: b.status,
       ticketCount: b.ticketCount,
-      paymentStatus: b.paymentStatus, 
+      paymentStatus: b.paymentStatus,
       userName: b.userName,
       userEmail: b.userEmail,
       tourTitle: b.tourTitle,
@@ -128,8 +128,8 @@ export const reserve = mutation({
 
     // 2. CREATE "HOLDING" BOOKING
     // 15 Minutes Expiration
-    const EXPIRE_TIME = 15 * 60 * 1000; 
-    
+    const EXPIRE_TIME = 15 * 60 * 1000;
+
     const bookingId = await ctx.db.insert("bookings", {
       tourId: tour._id,
       userId: user._id,
@@ -139,13 +139,13 @@ export const reserve = mutation({
       tourTitle: tour.title,
       tourDate: tour.startDate,
       tourPrice: tour.price,
-      
+
       status: "holding",
       expiresAt: Date.now() + EXPIRE_TIME,
-      
+
       // Defaults until they finish Step 2
-      paymentMethod: "transfer", 
-      paymentStatus: "pending", 
+      paymentMethod: "transfer",
+      paymentStatus: "pending",
     });
 
     return { bookingId, expiresAt: Date.now() + EXPIRE_TIME };
@@ -163,18 +163,18 @@ export const confirm = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const booking = await ctx.db.get(args.bookingId);
-    
+
     if (!booking || booking.userId !== user._id) throw new ConvexError("Unauthorized");
-    
+
     // Safety Check: Is it expired?
     if (booking.status === "expired") {
-        throw new ConvexError("Reservation expired. Please book again.");
+      throw new ConvexError("Reservation expired. Please book again.");
     }
 
     // Update status based on method
-    const paymentStatus = (args.paymentMethod === "transfer" && args.proofImageId) 
-        ? "reviewing" 
-        : "pending";
+    const paymentStatus = (args.paymentMethod === "transfer" && args.proofImageId)
+      ? "reviewing"
+      : "pending";
 
     await ctx.db.patch(args.bookingId, {
       status: "pending", // Moves from "holding" to "pending"
@@ -192,25 +192,25 @@ export const cleanupExpired = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    
+
     // Find holding bookings that have passed their expiration time
     const expiredBookings = await ctx.db
-        .query("bookings")
-        .withIndex("by_holding", (q) => q.eq("status", "holding"))
-        .filter((q) => q.lt(q.field("expiresAt"), now))
-        .collect();
+      .query("bookings")
+      .withIndex("by_holding", (q) => q.eq("status", "holding"))
+      .filter((q) => q.lt(q.field("expiresAt"), now))
+      .collect();
 
     for (const booking of expiredBookings) {
-        // A. Mark as expired
-        await ctx.db.patch(booking._id, { status: "expired" });
-        
-        // B. Return seats to inventory
-        const tour = await ctx.db.get(booking.tourId);
-        if (tour) {
-            await ctx.db.patch(tour._id, {
-                bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
-            });
-        }
+      // A. Mark as expired
+      await ctx.db.patch(booking._id, { status: "expired" });
+
+      // B. Return seats to inventory
+      const tour = await ctx.db.get(booking.tourId);
+      if (tour) {
+        await ctx.db.patch(tour._id, {
+          bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
+        });
+      }
     }
   }
 });
@@ -233,10 +233,10 @@ export const verifyPayment = mutation({
     } else {
       // If rejected, free the seats
       const tour = await ctx.db.get(booking.tourId);
-      if(tour) {
-         await ctx.db.patch(tour._id, {
-             bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
-         });
+      if (tour) {
+        await ctx.db.patch(tour._id, {
+          bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
+        });
       }
       await ctx.db.patch(args.bookingId, {
         status: "cancelled",
@@ -266,4 +266,61 @@ export const cancelBooking = mutation({
       });
     }
   },
+});
+
+// --------------------------------------------------------------------------
+// 9. SCAN TICKET (New)
+// --------------------------------------------------------------------------
+export const validateTicket = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+    ticketNumber: v.number()
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (user.role !== "admin") throw new ConvexError("Admin privileges required");
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new ConvexError("Booking ID not found");
+
+    // 1. Check if Booking is Valid
+    if (booking.status !== "confirmed") {
+      return {
+        valid: false,
+        message: `Booking is ${booking.status.toUpperCase()}`,
+        booking
+      };
+    }
+
+    // 2. Check if Ticket Number exists in this booking (e.g. Booking has 2 tix, scanning Ticket #99)
+    if (args.ticketNumber < 1 || args.ticketNumber > booking.ticketCount) {
+      return {
+        valid: false,
+        message: "Invalid Ticket Number",
+        booking
+      };
+    }
+
+    // 3. Check if ALREADY redeemed
+    const redeemed = booking.redeemedTickets || [];
+    if (redeemed.includes(args.ticketNumber)) {
+      return {
+        valid: false,
+        message: "ALREADY REDEEMED",
+        alreadyRedeemed: true,
+        booking
+      };
+    }
+
+    // 4. Success: Mark as redeemed
+    await ctx.db.patch(args.bookingId, {
+      redeemedTickets: [...redeemed, args.ticketNumber]
+    });
+
+    return {
+      valid: true,
+      message: "Access Granted",
+      booking
+    };
+  }
 });
