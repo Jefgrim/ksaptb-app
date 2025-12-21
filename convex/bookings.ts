@@ -225,6 +225,11 @@ export const verifyPayment = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking not found");
 
+    // SAFETY CHECK: Prevent double processing
+    if (booking.paymentStatus === "paid" || booking.paymentStatus === "rejected") {
+      throw new ConvexError(`This booking has already been ${booking.paymentStatus}.`);
+    }
+
     if (args.action === "approve") {
       await ctx.db.patch(args.bookingId, {
         status: "confirmed",
@@ -233,13 +238,16 @@ export const verifyPayment = mutation({
     } else {
       // If rejected, free the seats
       const tour = await ctx.db.get(booking.tourId);
-      if (tour) {
+
+      // Only return seats if the booking wasn't already rejected
+      if (tour && booking.status !== "rejected") {
         await ctx.db.patch(tour._id, {
           bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
         });
       }
+
       await ctx.db.patch(args.bookingId, {
-        status: "cancelled",
+        status: "rejected",
         paymentStatus: "rejected",
       });
     }

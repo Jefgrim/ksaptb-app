@@ -35,15 +35,32 @@ export function BookingList() {
   const [searchName, setSearchName] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const filteredBookings = bookings?.filter((b) => {
-    const matchesRef = (b._id ?? "").toLowerCase().includes(searchRef.toLowerCase());
-    const matchesName =
-      (b.userName?.toLowerCase() ?? "").includes(searchName.toLowerCase()) ||
-      (b.userEmail?.toLowerCase() ?? "").includes(searchName.toLowerCase());
-    const matchesStatus = filterStatus === "all" ? true : b.status === filterStatus;
+  // --- IMPROVED FILTERING & SORTING LOGIC ---
+  const filteredBookings = (bookings || [])
+    .filter((b) => {
+      const matchesRef = (b._id ?? "").toLowerCase().includes(searchRef.toLowerCase());
+      const matchesName =
+        (b.userName?.toLowerCase() ?? "").includes(searchName.toLowerCase()) ||
+        (b.userEmail?.toLowerCase() ?? "").includes(searchName.toLowerCase());
+      
+      const matchesStatus = 
+        filterStatus === "all" ? true : 
+        filterStatus === "reviewing" ? b.paymentStatus === "reviewing" : // Special check for reviewing
+        b.status === filterStatus;
 
-    return matchesRef && matchesName && matchesStatus;
-  }) || [];
+      return matchesRef && matchesName && matchesStatus;
+    })
+    .sort((a, b) => {
+      // PRIORITY 1: "Reviewing" always comes first
+      const aNeedsReview = a.paymentStatus === "reviewing";
+      const bNeedsReview = b.paymentStatus === "reviewing";
+
+      if (aNeedsReview && !bNeedsReview) return -1; // Move A up
+      if (!aNeedsReview && bNeedsReview) return 1;  // Move B up
+
+      // PRIORITY 2: Newest bookings first (Booking ID is time-sortable)
+      return a._id > b._id ? -1 : 1; 
+    });
 
   const handleCancel = async (bookingId: Id<"bookings">) => {
     if (!confirm("Are you sure? This will release the tickets.")) return;
@@ -66,7 +83,15 @@ export function BookingList() {
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <CardTitle>Master Booking List</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+                Master Booking List
+                {/* Optional: Counter for Pending Reviews */}
+                {bookings?.some(b => b.paymentStatus === "reviewing") && (
+                   <Badge variant="destructive" className="ml-2 animate-pulse">
+                      Action Needed
+                   </Badge>
+                )}
+            </CardTitle>
             <div className="text-sm text-gray-500">
               Showing {filteredBookings.length} results
             </div>
@@ -90,9 +115,9 @@ export function BookingList() {
               value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
             >
               <option value="all">All Statuses</option>
-              <option value="reviewing">Needs Review</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="reviewing">⚠️ Needs Review</option>
+              <option value="confirmed">✅ Confirmed</option>
+              <option value="cancelled">❌ Cancelled</option>
             </select>
           </div>
 
@@ -117,7 +142,11 @@ export function BookingList() {
                   </TableRow>
                 ) : (
                   filteredBookings.map((b) => (
-                    <TableRow key={b._id}>
+                    <TableRow 
+                        key={b._id} 
+                        // Add a subtle highlight to reviewing rows
+                        className={b.paymentStatus === "reviewing" ? "bg-amber-50/50 hover:bg-amber-50" : ""}
+                    >
                       <TableCell className="font-mono text-xs text-gray-500">
                         {b._id.slice(-6)}
                       </TableCell>
@@ -137,8 +166,8 @@ export function BookingList() {
                         <Badge
                           variant={
                             b.status === "confirmed" ? "default" :
-                              b.status === "cancelled" ? "destructive" :
-                                b.paymentStatus === "reviewing" ? "outline" : "secondary"
+                            b.status === "cancelled" ? "destructive" :
+                              b.paymentStatus === "reviewing" ? "outline" : "secondary"
                           }
                           className={b.paymentStatus === "reviewing" ? "bg-amber-100 text-amber-800 border-amber-200" : ""}
                         >
@@ -154,7 +183,7 @@ export function BookingList() {
                           {b.paymentStatus === "reviewing" && (
                             <Button
                               size="sm"
-                              className="bg-blue-600 hover:bg-blue-700 h-8 gap-1"
+                              className="bg-blue-600 hover:bg-blue-700 h-8 gap-1 shadow-sm"
                               onClick={() => openReview(b._id)}
                             >
                               <Eye className="w-3 h-3" /> Review

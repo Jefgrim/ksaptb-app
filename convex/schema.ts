@@ -40,7 +40,8 @@ export default defineSchema({
       v.literal("pending"),
       v.literal("confirmed"),
       v.literal("cancelled"),
-      v.literal("expired")
+      v.literal("expired"),
+      v.literal("rejected"),
     ),
 
     paymentMethod: v.union(v.literal("stripe"), v.literal("transfer")),
