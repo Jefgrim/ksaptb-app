@@ -12,12 +12,14 @@ export default defineSchema({
   tours: defineTable({
     title: v.string(),
     description: v.string(),
-    price: v.number(), // stored in Halalas/Cents
+    price: v.number(),
     startDate: v.number(),
     capacity: v.number(),
     bookedCount: v.number(),
     coverImageId: v.optional(v.id("_storage")),
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
+    // NEW: Track if tour is cancelled by admin
+    cancelled: v.optional(v.boolean()), 
   }),
 
   bookings: defineTable({
@@ -32,31 +34,32 @@ export default defineSchema({
     tourDate: v.number(),
     tourPrice: v.number(),
 
-    // Payment Logic
-    // "holding" = Reserved for 10 mins, waiting for payment
-    // "expired" = User didn't pay in time, seat released
     status: v.union(
       v.literal("holding"),
       v.literal("pending"),
       v.literal("confirmed"),
-      v.literal("cancelled"),
-      v.literal("expired"),
-      v.literal("rejected"),
+      v.literal("cancelled"), // User cancelled
+      v.literal("expired"),   // System expired
+      v.literal("rejected"),  // Admin rejected
+      v.literal("refunded"),  // Admin cancelled tour & refunded user
     ),
 
     paymentMethod: v.union(v.literal("stripe"), v.literal("transfer")),
-    paymentStatus: v.string(), // pending, reviewing, paid, rejected
+    // NEW: "expired" is now a valid payment status
+    paymentStatus: v.string(), 
 
+    // User inputs
     proofImageId: v.optional(v.id("_storage")),
-    refundDetails: v.optional(v.string()),
+    refundDetails: v.optional(v.string()), 
+    contactNumber: v.optional(v.string()), // NEW: User contact info
 
-    // NEW: When does the hold expire?
+    // Admin Refund Logic (For Cancelled Tours)
+    adminRefundProofId: v.optional(v.id("_storage")), // NEW
+    
     expiresAt: v.optional(v.number()),
-
     redeemedTickets: v.optional(v.array(v.number())),
   })
     .index("by_tour", ["tourId"])
     .index("by_user", ["userId"])
-    // Important: Index to find expired bookings quickly
     .index("by_holding", ["status", "expiresAt"]),
 });

@@ -133,8 +133,8 @@ export const book = mutation({
       tourTitle: tour.title,
       tourDate: tour.startDate,
       tourPrice: tour.price,
-      paymentMethod: "transfer", 
-      paymentStatus: "paid", 
+      paymentMethod: "transfer",
+      paymentStatus: "paid",
     });
 
     await ctx.db.patch(tour._id, {
@@ -154,10 +154,13 @@ export const deleteTour = mutation({
       .withIndex("by_tour", (q) => q.eq("tourId", args.id))
       .collect();
 
-    const activeBookings = bookings.filter(b => b.status !== "cancelled");
+    // Prevent deleting if there are ANY relevant bookings (Confirmed, Refunded, etc). 
+    // Only allow delete if completely empty or only has expired/rejected history that is very old.
+    // For safety based on prompt: "Admin can't delete... only cancel". 
+    // We will allow delete ONLY if 0 bookings exist.
 
-    if (activeBookings.length > 0) {
-      throw new ConvexError("Cannot delete this tour because it has active bookings. Cancel them first.");
+    if (bookings.length > 0) {
+      throw new ConvexError("Cannot delete tour. Use 'Cancel Tour' instead to handle refunds.");
     }
 
     const tour = await ctx.db.get(args.id);
@@ -215,5 +218,35 @@ export const update = mutation({
     }
 
     await ctx.db.patch(id, fields);
+  },
+});
+
+
+export const cancelTour = mutation({
+  args: { id: v.id("tours") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const tour = await ctx.db.get(args.id);
+    if (!tour) throw new ConvexError("Tour not found");
+
+    // Check for "pending" bookings (Status: pending, reviewing)
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_tour", (q) => q.eq("tourId", args.id))
+      .collect();
+
+    const hasPending = bookings.some(b =>
+      b.status === "pending" || b.paymentStatus === "reviewing"
+    );
+
+    if (hasPending) {
+      throw new ConvexError("Cannot cancel tour while bookings are pending review. Please Accept or Reject them first.");
+    }
+
+    // Mark tour as cancelled
+    await ctx.db.patch(args.id, {
+      cancelled: true,
+    });
   },
 });

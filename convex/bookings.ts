@@ -6,6 +6,33 @@ import { requireAdmin, requireUser } from "./auth";
 // QUERIES
 // --------------------------------------------------------------------------
 
+export const getBookingsByTour = query({
+  args: { tourId: v.id("tours") },
+  handler: async (ctx, args) => {
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
+      .collect();
+
+    // Map over bookings to generate URLs
+    return Promise.all(
+      bookings.map(async (b) => {
+        let proofUrl = null;
+        // If there is a proofImageId (Admin Refund) or paymentImageId (User Payment)
+        // You might want to return URLs for both
+        if (b.proofImageId) {
+          proofUrl = await ctx.storage.getUrl(b.proofImageId);
+        }
+
+        return {
+          ...b,
+          proofUrl, // <--- This is what the UI uses
+        };
+      })
+    );
+  },
+});
+
 // 1. Get My Bookings (Standard)
 export const getMyBookings = query({
   handler: async (ctx) => {
@@ -24,12 +51,8 @@ export const getMyBookings = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Filter out "expired" from the main dashboard list
-    // We only want to show real bookings here
-    const visibleBookings = bookings.filter(b => b.status !== "expired");
-
     const bookingsWithTour = await Promise.all(
-      visibleBookings.map(async (booking) => {
+      bookings.map(async (booking) => {
         const tour = await ctx.db.get(booking.tourId);
         let imageUrl = null;
         if (tour && tour.coverImageId) {
@@ -73,6 +96,8 @@ export const getMyActiveHolding = query({
 // 3. Admin Queries (Keep existing)
 export const getAllBookings = query({
   handler: async (ctx) => {
+    await requireAdmin(ctx);
+
     const bookings = await ctx.db.query("bookings").order("desc").collect();
     return bookings.map((b) => ({
       _id: b._id,
@@ -91,8 +116,7 @@ export const getAllBookings = query({
 export const getBookingForAdmin = query({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (user.role !== "admin") return null;
+    await requireAdmin(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) return null;
     let proofUrl = null;
@@ -159,6 +183,7 @@ export const confirm = mutation({
     paymentMethod: v.union(v.literal("stripe"), v.literal("transfer")),
     proofImageId: v.optional(v.id("_storage")),
     refundDetails: v.optional(v.string()),
+    contactNumber: v.string(), // NEW: Required
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -166,23 +191,22 @@ export const confirm = mutation({
 
     if (!booking || booking.userId !== user._id) throw new ConvexError("Unauthorized");
 
-    // Safety Check: Is it expired?
     if (booking.status === "expired") {
       throw new ConvexError("Reservation expired. Please book again.");
     }
 
-    // Update status based on method
     const paymentStatus = (args.paymentMethod === "transfer" && args.proofImageId)
       ? "reviewing"
       : "pending";
 
     await ctx.db.patch(args.bookingId, {
-      status: "pending", // Moves from "holding" to "pending"
-      expiresAt: undefined, // Remove expiration!
+      status: "pending",
+      expiresAt: undefined,
       paymentMethod: args.paymentMethod,
       paymentStatus: paymentStatus,
       proofImageId: args.proofImageId,
       refundDetails: args.refundDetails,
+      contactNumber: args.contactNumber, // Saved
     });
   }
 });
@@ -192,8 +216,6 @@ export const cleanupExpired = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-
-    // Find holding bookings that have passed their expiration time
     const expiredBookings = await ctx.db
       .query("bookings")
       .withIndex("by_holding", (q) => q.eq("status", "holding"))
@@ -201,10 +223,12 @@ export const cleanupExpired = internalMutation({
       .collect();
 
     for (const booking of expiredBookings) {
-      // A. Mark as expired
-      await ctx.db.patch(booking._id, { status: "expired" });
+      // NEW: Mark both booking status AND payment status as expired
+      await ctx.db.patch(booking._id, {
+        status: "expired",
+        paymentStatus: "expired"
+      });
 
-      // B. Return seats to inventory
       const tour = await ctx.db.get(booking.tourId);
       if (tour) {
         await ctx.db.patch(tour._id, {
@@ -219,8 +243,7 @@ export const cleanupExpired = internalMutation({
 export const verifyPayment = mutation({
   args: { bookingId: v.id("bookings"), action: v.union(v.literal("approve"), v.literal("reject")) },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (user.role !== "admin") throw new ConvexError("Admin only");
+    await requireAdmin(ctx);
 
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking not found");
@@ -263,9 +286,9 @@ export const cancelBooking = mutation({
     if (!booking) throw new ConvexError("Booking not found");
 
     if (booking.userId !== user._id && user.role !== "admin") throw new ConvexError("Unauthorized");
-    if (booking.status === "cancelled") throw new ConvexError("Already cancelled");
+    if (booking.status === "expired") throw new ConvexError("Already expired");
 
-    await ctx.db.patch(args.bookingId, { status: "cancelled" });
+    await ctx.db.patch(args.bookingId, { status: "expired", paymentStatus: "expired" });
 
     const tour = await ctx.db.get(booking.tourId);
     if (tour) {
@@ -285,8 +308,7 @@ export const validateTicket = mutation({
     ticketNumber: v.number()
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (user.role !== "admin") throw new ConvexError("Admin privileges required");
+    await requireAdmin(ctx);
 
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking ID not found");
@@ -330,5 +352,25 @@ export const validateTicket = mutation({
       message: "Access Granted",
       booking
     };
+  }
+});
+
+export const processAdminRefund = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+    proofImageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new ConvexError("Booking not found");
+
+    // Update status to 'refunded'
+    await ctx.db.patch(args.bookingId, {
+      status: "refunded",
+      paymentStatus: "refunded",
+      adminRefundProofId: args.proofImageId
+    });
   }
 });
