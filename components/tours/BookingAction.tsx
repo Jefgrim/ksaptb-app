@@ -61,7 +61,7 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
   const fileInput = useRef<HTMLInputElement>(null);
 
   const remaining = capacity - bookedCount;
-  const displayPrice = (price * (step === "payment" && activeHolding ? activeHolding.ticketCount : ticketCount));
+  const displayPrice = (price * (step === "payment" && activeHolding ? activeHolding.ticketCount : ticketCount) / 100);
 
   // --- EFFECTS ---
   useEffect(() => {

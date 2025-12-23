@@ -15,14 +15,34 @@ function getKsaToday() {
 // 1. ADMIN LIST (Shows ALL tours, even past ones)
 export const list = query({
   handler: async (ctx) => {
-    const tours = await ctx.db.query("tours").collect();
+    const tours = await ctx.db.query("tours").order("desc").collect();
+
     return await Promise.all(
-      tours.map(async (tour) => ({
-        ...tour,
-        imageUrl: tour.coverImageId
-          ? await ctx.storage.getUrl(tour.coverImageId)
-          : null,
-      }))
+      tours.map(async (tour) => {
+        // Find if ANY booking exists that is in an "In-Progress" state.
+        // We fetch all bookings for the tour first (efficient enough for admin view)
+        // to perform a complex check on multiple fields.
+        const bookings = await ctx.db
+          .query("bookings")
+          .withIndex("by_tour", (q) => q.eq("tourId", tour._id))
+          .collect();
+
+        // STRICT CHECK: Returns true if any booking is "holding", "pending", or payment is "reviewing"
+        const hasPendingBookings = bookings.some(b => 
+          b.status === "pending" || 
+          b.status === "holding" || 
+          b.paymentStatus === "reviewing" ||
+          b.paymentStatus === "pending"
+        );
+
+        return {
+          ...tour,
+          imageUrl: tour.coverImageId
+            ? await ctx.storage.getUrl(tour.coverImageId)
+            : null,
+          hasPendingBookings, // Boolean flag for Frontend
+        };
+      })
     );
   },
 });
@@ -33,8 +53,10 @@ export const listUpcoming = query({
     const tours = await ctx.db.query("tours").collect();
     const now = Date.now();
 
-    // FILTER: Start Date must be in the future
-    const upcomingTours = tours.filter(tour => tour.startDate >= now);
+    // FILTER: Start Date must be in the future AND not cancelled
+    const upcomingTours = tours.filter(tour => 
+      tour.startDate >= now && !tour.cancelled
+    );
 
     return await Promise.all(
       upcomingTours.map(async (tour) => ({
@@ -114,6 +136,11 @@ export const book = mutation({
     const user = await requireUser(ctx);
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new Error("Tour not found");
+
+    // NEW SECURITY CHECK: Block cancelled tours
+    if (tour.cancelled) {
+      throw new ConvexError("This tour has been cancelled and cannot be booked.");
+    }
 
     if (tour.startDate < Date.now()) {
       throw new ConvexError("This tour has already started or ended.");
@@ -230,18 +257,22 @@ export const cancelTour = mutation({
     const tour = await ctx.db.get(args.id);
     if (!tour) throw new ConvexError("Tour not found");
 
-    // Check for "pending" bookings (Status: pending, reviewing)
+    // Fetch all bookings for this tour
     const bookings = await ctx.db
       .query("bookings")
       .withIndex("by_tour", (q) => q.eq("tourId", args.id))
       .collect();
 
+    // STRICT VALIDATION: Check for any incomplete status
     const hasPending = bookings.some(b =>
-      b.status === "pending" || b.paymentStatus === "reviewing"
+      b.status === "pending" || 
+      b.status === "holding" || 
+      b.paymentStatus === "reviewing" ||
+      b.paymentStatus === "pending"
     );
 
     if (hasPending) {
-      throw new ConvexError("Cannot cancel tour while bookings are pending review. Please Accept or Reject them first.");
+      throw new ConvexError("Cannot cancel tour while bookings are in 'Holding', 'Pending', or 'Reviewing' status. Please resolve them first.");
     }
 
     // Mark tour as cancelled
