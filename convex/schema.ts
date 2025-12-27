@@ -22,13 +22,12 @@ export default defineSchema({
     // Track if tour is cancelled by admin
     cancelled: v.optional(v.boolean()), 
     
-    // --- NEW FIELD ---
-    // This allows the Cron job to mark a tour as "finished"
-    // so it becomes read-only and unbookable.
+    // Lifecycle: finished/read-only
     isCompleted: v.optional(v.boolean()), 
 
-    // Transfer instructions
+    // Transfer instructions & Payment Options
     transferInstructions: v.optional(v.string()),
+    paymentOption: v.union(v.literal("full"), v.literal("downpayment")),
   }),
 
   bookings: defineTable({
@@ -65,7 +64,15 @@ export default defineSchema({
     adminRefundProofId: v.optional(v.id("_storage")), 
     
     expiresAt: v.optional(v.number()),
-    redeemedTickets: v.optional(v.array(v.number())),
+
+    // --- NEW FIELD FOR SINGLE QR SCANNER ---
+    // Stores the timestamp when the group checked in.
+    // If this is set, the QR code is considered "Used".
+    checkedInAt: v.optional(v.number()),
+
+    // Downpayment Logic
+    paymentType: v.optional(v.union(v.literal("full"), v.literal("downpayment"))),
+    isSecondPaymentConfirmed: v.optional(v.boolean()),
   })
     .index("by_tour", ["tourId"])
     .index("by_user", ["userId"])

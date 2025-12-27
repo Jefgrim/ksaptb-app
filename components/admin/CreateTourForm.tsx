@@ -25,6 +25,7 @@ import {
   Loader2,
   AlignLeft,
 } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export function CreateTourForm() {
   const generateUploadUrl = useMutation(api.tours.generateUploadUrl);
@@ -41,6 +42,7 @@ export function CreateTourForm() {
     capacity: 10,
     date: '',
     transferInstructions: '',
+    paymentOption: 'full',
   });
 
   const todayStr = new Date().toLocaleDateString('en-CA', {
@@ -90,6 +92,7 @@ export function CreateTourForm() {
         coverImageId,
         galleryImageIds,
         transferInstructions: form.transferInstructions,
+        paymentOption: form.paymentOption as 'full' | 'downpayment',
       });
 
       toast.success('Tour Created Successfully!');
@@ -100,6 +103,7 @@ export function CreateTourForm() {
         capacity: 10,
         date: '',
         transferInstructions: '',
+        paymentOption: 'full',
       });
       if (imageInput.current) imageInput.current.value = '';
       if (galleryInput.current) galleryInput.current.value = '';
@@ -211,6 +215,29 @@ export function CreateTourForm() {
                 required
               />
             </div>
+          </div>
+
+          {/* PAYMENT OPTIONS */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 font-semibold">
+              Payment Options
+            </Label>
+            <RadioGroup
+              value={form.paymentOption}
+              onValueChange={(value) =>
+                setForm({ ...form, paymentOption: value })
+              }
+              className="flex items-center gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="full" id="full" />
+                <Label htmlFor="full">Full Payment</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="downpayment" id="downpayment" />
+                <Label htmlFor="downpayment">50% Downpayment</Label>
+              </div>
+            </RadioGroup>
           </div>
 
           {/* DESCRIPTION - Styled to look like an editor */}

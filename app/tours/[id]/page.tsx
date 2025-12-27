@@ -5,7 +5,7 @@ import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, CalendarOff } from 'lucide-react'; // Make sure to install lucide-react if not present
+import { AlertCircle, CalendarOff } from 'lucide-react';
 
 // Import our new components
 import { TourGallery } from '@/components/tours/TourGallery';
@@ -117,7 +117,7 @@ export default function TourDetail() {
                 </Button>
               </div>
             ) : (
-              // --- ACTIVE VIEW (Your existing component) ---
+              // --- ACTIVE VIEW ---
               <BookingAction
                 tourId={tour._id}
                 price={tour.price}
@@ -125,6 +125,7 @@ export default function TourDetail() {
                 bookedCount={tour.bookedCount}
                 startDate={tour.startDate}
                 transferInstructions={tour.transferInstructions}
+                paymentOption={tour.paymentOption}
               />
             )}
           </div>

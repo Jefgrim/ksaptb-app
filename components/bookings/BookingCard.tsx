@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from "react";
 import { Id } from "@/convex/_generated/dataModel";
 import { formatDateTime } from "@/lib/utils";
@@ -25,7 +27,7 @@ import {
 import QRCode from "react-qr-code"; 
 import { 
   CalendarDays, MapPin, Users, Wallet, Clock, XCircle, 
-  CheckCircle2, QrCode as QrIcon, ArrowRight, AlertTriangle, RefreshCcw, ExternalLink, AlertCircle, ChevronLeft, ChevronRight
+  CheckCircle2, QrCode as QrIcon, ArrowRight, AlertTriangle, RefreshCcw, ExternalLink
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -37,7 +39,6 @@ interface BookingCardProps {
 }
 
 export function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
-  const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
   
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
     holding:   { label: "Payment Needed", color: "bg-amber-100 text-amber-800 border-amber-200", icon: AlertTriangle },
@@ -57,72 +58,44 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
   const status = statusConfig[statusKey] || statusConfig.pending;
   const StatusIcon = status.icon;
 
-  const rawTotal = booking.totalPrice || (booking.tourPrice * booking.ticketCount);
-  const totalPaid = rawTotal / 100;
+  // CALCULATION (DB is in Cents)
+  const totalInCents = booking.tourPrice * booking.ticketCount; 
   const refId = booking._id.slice(-6).toUpperCase();
   const isRefunded = booking.status === "refunded";
 
+  // --- SINGLE QR DIALOG ---
   const QrDialogContent = () => {
-    const totalTickets = booking.ticketCount;
-    // The unique value for the QR code, e.g., "bookingId-1", "bookingId-2"
-    const ticketId = `${booking._id}-${currentTicketIndex + 1}`;
-
-    const handleNext = () => {
-      if (currentTicketIndex < totalTickets - 1) {
-        setCurrentTicketIndex(currentTicketIndex + 1);
-      }
-    };
-
-    const handlePrev = () => {
-      if (currentTicketIndex > 0) {
-        setCurrentTicketIndex(currentTicketIndex - 1);
-      }
-    };
+    const qrValue = booking._id; // Scan the Booking ID
 
     return (
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xs rounded-xl">
           <DialogHeader>
-              <DialogTitle className="text-center pb-2 border-b border-slate-100">
-                  Your Digital Ticket
+              <DialogTitle className="text-center pb-4">
+                  Entry Ticket
               </DialogTitle>
           </DialogHeader>
           
-          <div className="p-4 text-center space-y-4">
-              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-                  <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                  <h3 className="text-lg font-bold text-slate-900">{booking.tourTitle}</h3>
-                  <p className="text-slate-500 text-sm">Scan this code at the venue entrance.</p>
-              </div>
-              
-              <div className="flex justify-center p-4">
-                  <div className="border border-slate-200 p-4 rounded-lg bg-white inline-block">
-                      <QRCode 
-                        size={150} 
-                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                        value={ticketId} // Encode unique ticket ID
-                        viewBox={`0 0 256 256`}
-                      />
-                  </div>
+          <div className="flex flex-col items-center space-y-6 pb-4">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                  <QRCode 
+                    size={200} 
+                    style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                    value={qrValue} 
+                    viewBox={`0 0 256 256`}
+                  />
               </div>
 
-              {/* --- Ticket Navigator --- */}
-              {booking.ticketCount > 1 && (
-                 <div className="flex items-center justify-center gap-4">
-                    <Button onClick={handlePrev} disabled={currentTicketIndex === 0} variant="outline" size="icon" className="h-8 w-8">
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="text-sm font-bold text-slate-800">
-                        Ticket {currentTicketIndex + 1} of {booking.ticketCount}
-                    </div>
-                    <Button onClick={handleNext} disabled={currentTicketIndex === booking.ticketCount - 1} variant="outline" size="icon" className="h-8 w-8">
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-              )}
+              <div className="text-center space-y-1">
+                  <h3 className="font-bold text-lg text-slate-900 leading-tight">{booking.tourTitle}</h3>
+                  <div className="flex items-center justify-center gap-2 text-slate-600 font-medium">
+                     <Users className="w-4 h-4" /> 
+                     <span>{booking.ticketCount} Guest{booking.ticketCount > 1 ? 's' : ''}</span>
+                  </div>
+              </div>
               
-              <p className="text-[10px] text-slate-400">Ref: {refId}</p>
+              <div className="bg-slate-50 w-full py-2 rounded text-center">
+                 <p className="text-xs text-slate-400 font-mono tracking-widest">REF: {refId}</p>
+              </div>
           </div>
       </DialogContent>
     )
@@ -132,7 +105,7 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
     <Card className="group overflow-hidden border border-slate-200 bg-white hover:shadow-lg transition-all duration-300 mb-4">
       <div className="flex flex-col md:flex-row">
         
-        {/* --- LEFT: IMAGE SECTION --- */}
+        {/* LEFT: IMAGE */}
         <div className="relative w-full md:w-64 h-48 md:h-auto shrink-0 bg-slate-100 overflow-hidden">
            {booking.tour?.imageUrl ? (
             <Image 
@@ -155,7 +128,7 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
           </div>
         </div>
 
-        {/* --- RIGHT: CONTENT SECTION --- */}
+        {/* RIGHT: CONTENT */}
         <div className="flex-1 flex flex-col p-5 md:p-6">
           
           <div className="flex justify-between items-start gap-4 mb-4">
@@ -198,60 +171,23 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
              <div>
                <div className="flex items-center text-slate-400 text-xs uppercase font-bold mb-1.5">
                  <Wallet className="w-3.5 h-3.5 mr-1.5" /> 
-                 {isRefunded ? "Refunded Amount" : "Total Paid"}
+                 {isRefunded ? "Refunded Amount" : "Total Price"}
                </div>
                <div className={`text-sm font-bold ${isRefunded ? 'text-purple-600 line-through decoration-slate-300' : 'text-emerald-600'}`}>
-                 SAR {totalPaid.toFixed(2)}
+                 {/* PRICE DISPLAY: Divide by 100 to convert cents to currency */}
+                 SAR {(totalInCents / 100).toFixed(2)}
                </div>
              </div>
           </div>
-
-          {/* --- STATUS NOTICE --- */}
-          {(booking.status === 'refunded' || booking.status === 'rejected') && (
-            <div className={`mt-4 p-4 rounded-md border text-sm ${booking.status === 'refunded' ? 'bg-purple-50 border-purple-100' : 'bg-red-50 border-red-100'}`}>
-               <h4 className={`font-bold mb-2 flex items-center ${booking.status === 'refunded' ? 'text-purple-800' : 'text-red-800'}`}>
-                 <AlertCircle className="w-4 h-4 mr-2" />
-                 {booking.status === 'refunded' ? 'Refund Processed' : 'Booking Rejected'}
-               </h4>
-
-               {booking.rejectionReason && (
-                 <p className="mb-2 text-slate-700">
-                   <span className="font-semibold">Reason:</span> {booking.rejectionReason}
-                 </p>
-               )}
-
-               {booking.adminRefundProofUrl && (
-                 <div className="mt-2">
-                   <p className="mb-2 text-xs font-bold uppercase text-slate-500">Proof of Transaction:</p>
-                   <div className="relative w-full h-32 md:w-48 rounded-md overflow-hidden border border-slate-200 bg-white">
-                      <Image 
-                        src={booking.adminRefundProofUrl} 
-                        alt="Refund Proof" 
-                        fill 
-                        className="object-cover hover:scale-105 transition-transform" 
-                      />
-                   </div>
-                   <a href={booking.adminRefundProofUrl} target="_blank" className="text-xs text-blue-600 hover:underline mt-1.5 inline-flex items-center">
-                      <ExternalLink className="w-3 h-3 mr-1" /> View Full Image
-                   </a>
-                 </div>
-               )}
-            </div>
-          )}
 
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-3 items-center justify-between">
             
             {/* Cancel Button */}
             <div>
-                {onCancel && 
-                 !['cancelled', 'expired', 'rejected', 'refunded', 'completed'].includes(booking.status) && (
+                {onCancel && !['cancelled', 'expired', 'rejected', 'refunded', 'completed'].includes(booking.status) && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 -ml-2 h-9 text-xs font-medium"
-                      >
+                      <Button variant="ghost" size="sm" className="text-slate-400 hover:text-red-600 hover:bg-red-50 -ml-2 h-9 text-xs font-medium">
                         Cancel Reservation
                       </Button>
                     </AlertDialogTrigger>
@@ -265,17 +201,11 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
                           <div className="bg-red-50 p-3 rounded-md border border-red-100 text-sm font-medium text-red-800">
                             Warning: Refunds are NOT provided for user-initiated cancellations.
                           </div>
-                          <p className="text-xs text-slate-500">
-                            Refunds are only processed if the tour is cancelled by the administration.
-                          </p>
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Keep Booking</AlertDialogCancel>
-                        <AlertDialogAction 
-                          onClick={() => onCancel(booking._id)}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
+                        <AlertDialogAction onClick={() => onCancel(booking._id)} className="bg-red-600 hover:bg-red-700">
                           Yes, Cancel It
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -285,6 +215,7 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
             </div>
 
             <div className="flex gap-3 w-full md:w-auto">
+                {/* Hold / Pay Button */}
                 {booking.status === "holding" && (
                     <Link href={`/tours/${booking.tourId}`} className="w-full md:w-auto">
                         <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-200">
@@ -293,12 +224,13 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
                     </Link>
                 )}
 
+                {/* VIEW TICKET BUTTON */}
                 {booking.status === "confirmed" && (
-                    <Dialog onOpenChange={(isOpen) => !isOpen && setCurrentTicketIndex(0)}>
+                    <Dialog>
                         <DialogTrigger asChild>
                             <Button variant="outline" className="w-full md:w-auto border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700">
                                 <QrIcon className="w-4 h-4 mr-2" />
-                                View {booking.ticketCount > 1 ? "Tickets" : "Ticket"}
+                                Show Ticket
                             </Button>
                         </DialogTrigger>
                         <QrDialogContent />
@@ -307,7 +239,7 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
 
                 {(booking.status === "pending" || booking.status === "reviewing") && (
                    <div className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-2 rounded-md border border-blue-100">
-                      <Clock className="w-3.5 h-3.5 animate-pulse" /> Awaiting Admin Confirmation
+                      <Clock className="w-3.5 h-3.5 animate-pulse" /> Awaiting Confirmation
                    </div>
                 )}
             </div>

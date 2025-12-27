@@ -27,6 +27,8 @@ import {
   ArrowLeft,
   Phone,
   Lock,
+  Wallet,
+  CheckCircle2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatDate } from '@/lib/utils';
@@ -40,6 +42,7 @@ interface BookingActionProps {
   bookedCount: number;
   startDate: number;
   transferInstructions?: string;
+  paymentOption?: 'full' | 'downpayment';
 }
 
 export function BookingAction({
@@ -49,6 +52,7 @@ export function BookingAction({
   bookedCount,
   startDate,
   transferInstructions,
+  paymentOption,
 }: BookingActionProps) {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
@@ -86,13 +90,14 @@ export function BookingAction({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const remaining = capacity - bookedCount;
-  // Dynamic price calculation
-  const displayPrice =
-    (price *
-      (step === 'payment' && activeHolding
-        ? activeHolding.ticketCount
-        : ticketCount)) /
-    100;
+  const isDownpayment = paymentOption === 'downpayment';
+  
+  // LOGIC: Use the held ticket count if in payment step, otherwise use form input
+  const currentTicketCount = (step === 'payment' && activeHolding) ? activeHolding.ticketCount : ticketCount;
+
+  // LOGIC: Calculate totals
+  const rawTotal = (price * currentTicketCount) / 100; // The full 100% price
+  const displayPrice = isDownpayment ? rawTotal * 0.5 : rawTotal; // The amount to pay NOW
 
   // --- EFFECT: SYNC WITH SERVER STATE ---
   useEffect(() => {
@@ -114,17 +119,11 @@ export function BookingAction({
       if (diff <= 0) {
         setTimeLeft('00:00');
 
-        // FIX: If timer runs out, reset state instead of reloading
         if (step === 'payment' && bookingId) {
-          // 1. Reset UI locally immediately
           setExpiresAt(null);
           setStep('details');
           setBookingId(null);
-
-          // 2. Tell backend to cancel/expire it (Cleaning up DB)
-          // We use .catch() to ignore errors if it was already cleaned up by Cron
           cancelBooking({ bookingId }).catch(() => {});
-
           toast.error('Reservation time expired. Spot released.');
         }
       } else {
@@ -232,7 +231,6 @@ export function BookingAction({
       const msg = error.data?.message || 'Something went wrong';
       toast.error(msg);
 
-      // FIX: If backend says it's expired during confirm, force reset
       if (msg.toLowerCase().includes('expired')) {
         setStep('details');
         setBookingId(null);
@@ -260,31 +258,18 @@ export function BookingAction({
           <CardTitle>Tour Details</CardTitle>
           <CardDescription>{formatDate(startDate)}</CardDescription>
         </CardHeader>
-
         <CardContent className="pt-12 pb-12 flex flex-col items-center text-center space-y-6">
           <div className="bg-slate-100 p-6 rounded-full ring-8 ring-slate-50">
             <Lock className="w-8 h-8 text-slate-400" />
           </div>
-
           <div className="space-y-2">
-            <h3 className="text-lg font-bold text-slate-900">
-              Members Only Access
-            </h3>
+            <h3 className="text-lg font-bold text-slate-900">Members Only Access</h3>
             <p className="text-sm text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-              Sign in to view the{' '}
-              <strong className="text-slate-700">price</strong>,{' '}
-              <strong className="text-slate-700">available spots</strong>, and to
-              book your ticket.
+              Sign in to view the <strong className="text-slate-700">price</strong>, <strong className="text-slate-700">available spots</strong>, and to book your ticket.
             </p>
           </div>
-
           <Button
-            onClick={() =>
-              openSignIn({
-                afterSignInUrl: window.location.href,
-                afterSignUpUrl: window.location.href,
-              })
-            }
+            onClick={() => openSignIn({ afterSignInUrl: window.location.href, afterSignUpUrl: window.location.href })}
             className="w-full max-w-[200px]"
             size="lg"
           >
@@ -299,9 +284,7 @@ export function BookingAction({
   if (remaining <= 0 && step === 'details') {
     return (
       <Card className="border-red-200 bg-red-50">
-        <CardContent className="pt-6 text-center text-red-600 font-bold">
-          Sold Out
-        </CardContent>
+        <CardContent className="pt-6 text-center text-red-600 font-bold">Sold Out</CardContent>
       </Card>
     );
   }
@@ -315,13 +298,7 @@ export function BookingAction({
             <CardDescription>{formatDate(startDate)}</CardDescription>
           </div>
           {step === 'payment' && (
-            <div
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-mono font-bold border transition-colors ${
-                timeLeft === '00:00'
-                  ? 'bg-red-50 text-red-600 border-red-200'
-                  : 'bg-amber-50 text-amber-600 border-amber-200'
-              }`}
-            >
+            <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-mono font-bold border transition-colors ${timeLeft === '00:00' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
               <Timer className="w-4 h-4" />
               {timeLeft}
             </div>
@@ -330,12 +307,24 @@ export function BookingAction({
       </CardHeader>
 
       <CardContent className="pt-6 space-y-6">
+        
+        {/* --- DOWNPAYMENT NOTICE BANNER --- */}
+        {isDownpayment && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3">
+                <Wallet className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-blue-900">
+                    <p className="font-bold">50% Downpayment Option</p>
+                    <p className="opacity-90">
+                        You only need to pay <strong>50% of the total amount now</strong> to secure your reservation. The remaining balance will be collected later.
+                    </p>
+                </div>
+            </div>
+        )}
+
         {step === 'details' && (
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase text-slate-500">
-                Number of Guests
-              </Label>
+              <Label className="text-xs font-bold uppercase text-slate-500">Number of Guests</Label>
               <div className="flex items-center gap-4">
                 <Input
                   type="number"
@@ -345,34 +334,44 @@ export function BookingAction({
                   onChange={(e) => setTicketCount(Number(e.target.value))}
                   className="text-lg font-bold w-24"
                 />
-                <span className="text-sm text-slate-500">
-                  {remaining} spots remaining
-                </span>
+                <span className="text-sm text-slate-500">{remaining} spots remaining</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-lg font-bold pt-4 border-t">
-              <span>Total:</span>
-              <span>SAR {displayPrice.toFixed(2)}</span>
+            <div className="pt-4 border-t space-y-2">
+                
+                {/* 1. Full Total Row */}
+                <div className="flex items-center justify-between text-slate-600">
+                    <span className="text-sm font-medium">Total Tour Value:</span>
+                    <span className={`font-semibold ${isDownpayment ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                        SAR {rawTotal.toFixed(2)}
+                    </span>
+                </div>
+
+                {/* 2. Downpayment Calculation Row */}
+                {isDownpayment && (
+                    <div className="flex items-center justify-between text-lg font-bold bg-blue-50 p-3 rounded-md border border-blue-100 text-blue-800">
+                        <span className="flex items-center gap-2">
+                            Pay Today (50%):
+                        </span>
+                        <span>SAR {displayPrice.toFixed(2)}</span>
+                    </div>
+                )}
+
+                {/* 3. Standard Total (if not downpayment) */}
+                {!isDownpayment && (
+                    <div className="flex items-center justify-between text-xl font-bold text-slate-900 mt-2">
+                        <span>Total:</span>
+                        <span>SAR {displayPrice.toFixed(2)}</span>
+                    </div>
+                )}
             </div>
 
             <div className="flex flex-col gap-3">
-              <Button
-                onClick={handleReserve}
-                disabled={isProcessing}
-                className="w-full h-12 text-lg"
-              >
-                {isProcessing ? (
-                  <Loader2 className="animate-spin mr-2" />
-                ) : (
-                  'Reserve Spot'
-                )}
+              <Button onClick={handleReserve} disabled={isProcessing} className="w-full h-12 text-lg">
+                {isProcessing ? <Loader2 className="animate-spin mr-2" /> : 'Reserve Spot'}
               </Button>
-              <Button
-                variant="ghost"
-                className="w-full text-slate-500"
-                onClick={() => router.back()}
-              >
+              <Button variant="ghost" className="w-full text-slate-500" onClick={() => router.back()}>
                 <ArrowLeft className="w-4 h-4 mr-2" /> Return
               </Button>
             </div>
@@ -381,65 +380,65 @@ export function BookingAction({
 
         {step === 'payment' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-right-4">
-            <div className="bg-blue-50 border border-blue-100 p-3 rounded-md text-sm text-blue-900">
-              Reserved <strong>{ticketCount} tickets</strong>. Please complete
-              payment within 15 minutes.
+            <div className="bg-amber-50 border border-amber-100 p-3 rounded-md text-sm text-amber-900 flex gap-2">
+               <Timer className="w-4 h-4 mt-0.5" />
+               <span>
+                  Reserved <strong>{ticketCount} tickets</strong>. Please complete payment within 15 minutes to avoid losing your spot.
+               </span>
             </div>
 
             <div className="space-y-4">
-              <Label className="text-xs font-bold uppercase text-slate-500">
-                Contact Details
-              </Label>
+              <Label className="text-xs font-bold uppercase text-slate-500">Contact Details</Label>
               <div>
-                <Label className="text-xs mb-1 block">
-                  Phone Number <span className="text-red-500">*</span>
-                </Label>
+                <Label className="text-xs mb-1 block">Phone Number <span className="text-red-500">*</span></Label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <Input
                     type="tel"
-                    placeholder='+966...'
+                    placeholder="+966..."
                     className="pl-9"
                     value={contactNumber}
-                    onChange={(e) =>
-                      setContactNumber(e.target.value.replace(/\D/g, ''))
-                    }
+                    onChange={(e) => setContactNumber(e.target.value.replace(/\D/g, ''))}
                   />
                 </div>
               </div>
             </div>
 
             <div className="space-y-3 pt-2 border-t">
-              <Label className="text-xs font-bold uppercase text-slate-500">
-                Payment Method
-              </Label>
+              <Label className="text-xs font-bold uppercase text-slate-500">Payment Method</Label>
               <div className="bg-slate-50 p-3 rounded-md border flex items-center gap-2 text-slate-700">
                 <Landmark className="w-4 h-4 text-green-600" />
-                <span className="font-medium text-sm">
-                  Bank Transfer / Manual Payment
-                </span>
+                <span className="font-medium text-sm">Bank Transfer / Manual Payment</span>
               </div>
             </div>
 
             {paymentMethod === 'transfer' && (
               <div className="space-y-4 pt-2">
-                <div className="p-4 bg-amber-50 text-amber-900 rounded-lg border border-amber-100 text-sm">
-                  <p className="font-bold flex items-center gap-2 mb-2">
-                    <Info className="w-4 h-4" /> Transfer Instructions:
+                <div className="p-4 bg-white border-2 border-slate-100 rounded-lg text-sm shadow-sm">
+                  <p className="font-bold flex items-center gap-2 mb-3 text-slate-800 border-b pb-2">
+                    <Info className="w-4 h-4 text-blue-600" /> Transfer Instructions:
                   </p>
-                  <div className="bg-white/60 p-2 rounded font-mono text-xs mb-2 whitespace-pre-wrap">
-                    {transferInstructions ||
-                      'Please contact us for payment details.'}
-                    <br />
-                    Amount: SAR {displayPrice.toFixed(2)}
+                  
+                  <div className="font-mono text-xs text-slate-600 bg-slate-50 p-3 rounded mb-3 whitespace-pre-wrap border border-slate-200">
+                    {transferInstructions || 'Please contact us for payment details.'}
                   </div>
+
+                  <div className="flex justify-between items-center bg-green-50 p-3 rounded border border-green-100 text-green-900">
+                      <span className="font-semibold">
+                          {isDownpayment ? "Amount to Transfer (50% Deposit):" : "Amount to Transfer:"}
+                      </span>
+                      <span className="font-bold text-lg">SAR {displayPrice.toFixed(2)}</span>
+                  </div>
+                  
+                  {isDownpayment && (
+                      <p className="text-[10px] text-slate-400 mt-2 text-center">
+                          * The remaining 50% (SAR {(rawTotal - displayPrice).toFixed(2)}) is collected during the tour.
+                      </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold">
-                    Your Refund Details (IBAN, Name){' '}
-                    <span className="text-red-500">*</span>
-                  </Label>
+                  <Label className="text-xs font-bold">Your Refund Details (IBAN, Name) <span className="text-red-500">*</span></Label>
                   <Textarea
                     placeholder="Bank Name: ...&#10;Account Name: ...&#10;IBAN: SA..."
                     value={refundDetails}
@@ -450,50 +449,29 @@ export function BookingAction({
 
                 <div
                   className={`relative border-2 border-dashed p-4 rounded-xl text-center transition-colors cursor-pointer group ${
-                    selectedFile
-                      ? 'border-green-300 bg-green-50'
-                      : 'border-slate-300 hover:bg-slate-50'
+                    selectedFile ? 'border-green-300 bg-green-50' : 'border-slate-300 hover:bg-slate-50'
                   }`}
                   onClick={() => !selectedFile && fileInput.current?.click()}
                 >
-                  <Input
-                    type="file"
-                    ref={fileInput}
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
+                  <Input type="file" ref={fileInput} accept="image/*" className="hidden" onChange={handleFileSelect} />
                   {selectedFile ? (
                     <div className="flex items-center gap-3 text-left">
                       {previewUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={previewUrl}
-                          alt="Preview"
-                          className="w-12 h-12 rounded object-cover bg-slate-200 shrink-0"
-                        />
+                        <img src={previewUrl} alt="Preview" className="w-12 h-12 rounded object-cover bg-slate-200 shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-green-800 truncate">
-                          {selectedFile.name}
-                        </p>
+                        <p className="text-sm font-semibold text-green-800 truncate">{selectedFile.name}</p>
                         <p className="text-xs text-green-600">Ready to upload</p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-slate-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={handleRemoveFile}
-                      >
+                      <Button variant="ghost" size="icon" className="text-slate-500 hover:text-red-600 hover:bg-red-50" onClick={handleRemoveFile}>
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
                   ) : (
                     <div className="py-4">
                       <Upload className="mx-auto h-8 w-8 text-slate-400 mb-2 group-hover:text-slate-600 transition-colors" />
-                      <p className="text-sm font-medium text-slate-600">
-                        Click to Upload Payment Proof
-                      </p>
+                      <p className="text-sm font-medium text-slate-600">Click to Upload Payment Proof</p>
                     </div>
                   )}
                 </div>
@@ -501,24 +479,11 @@ export function BookingAction({
             )}
 
             <div className="flex gap-3 flex-col-reverse sm:flex-row">
-              <Button
-                variant="outline"
-                onClick={handleCancelReservation}
-                disabled={isProcessing}
-                className="flex-1 h-12 text-slate-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100"
-              >
+              <Button variant="outline" onClick={handleCancelReservation} disabled={isProcessing} className="flex-1 h-12 text-slate-500 hover:text-red-600 hover:bg-red-50 hover:border-red-100">
                 Cancel
               </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={isProcessing}
-                className="flex-1 h-12 text-lg"
-              >
-                {isProcessing ? (
-                  <Loader2 className="animate-spin mr-2" />
-                ) : (
-                  'Confirm & Upload'
-                )}
+              <Button onClick={handleConfirm} disabled={isProcessing} className="flex-1 h-12 text-lg">
+                {isProcessing ? <Loader2 className="animate-spin mr-2" /> : 'Confirm & Upload'}
               </Button>
             </div>
           </div>
