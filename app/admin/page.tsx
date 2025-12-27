@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, QrCode } from "lucide-react";
+import { ArrowLeft, QrCode, FileText } from "lucide-react";
 
 // 1. Import your AuthGuard
 import AdminGuard from "@/components/AdminGuard";
@@ -12,6 +12,7 @@ import AdminGuard from "@/components/AdminGuard";
 import { BookingList } from "@/components/admin/BookingList";
 import { TourList } from "@/components/admin/TourList";
 import { CreateTourForm } from "@/components/admin/CreateTourForm";
+import { AnalyticsDashboard } from "@/components/admin/AnalyticsDashboard";
 
 export default function AdminDashboard() {
   // You no longer need useUser, useQuery, or useEffect here!
@@ -33,6 +34,13 @@ export default function AdminDashboard() {
               </Button>
             </Link>
 
+            <Link href="/admin/report">
+              <Button className="gap-2 bg-green-600 hover:bg-green-700 text-white">
+                <FileText className="w-4 h-4" />
+                Financial Report
+              </Button>
+            </Link>
+
             {/* Return Button */}
             <Link href="/">
               <Button variant="outline" className="w-full md:w-auto gap-2 border-slate-300">
@@ -45,11 +53,16 @@ export default function AdminDashboard() {
 
         {/* --- TABS SECTION --- */}
         <Tabs defaultValue="bookings" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-8">
+          <TabsList className="grid w-full grid-cols-4 mb-8">
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="bookings">All Bookings</TabsTrigger>
             <TabsTrigger value="tours">Manage Tours</TabsTrigger>
             <TabsTrigger value="create">Create Tour</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="analytics">
+            <AnalyticsDashboard />
+          </TabsContent>
 
           <TabsContent value="bookings">
             <BookingList />

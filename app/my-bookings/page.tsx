@@ -48,14 +48,17 @@ function MyBookingsContent() {
     return isFuture && isActive;
   });
 
-  const past = sortedData.filter((b) => {
+  const completed = sortedData.filter((b) => {
     const isPastDate = (b.tour?.startDate || 0) < now;
     return b.status === "confirmed" && isPastDate;
   });
 
   const cancelled = sortedData.filter((b) => 
-    b.status === "cancelled" || b.status === "expired" || b.status === "rejected" || b.status === "refunded"
+    b.status === "cancelled" || b.status === "refunded"
   );
+  
+  const expired = sortedData.filter((b) => b.status === "expired");
+  const rejected = sortedData.filter((b) => b.status === "rejected");
 
   const pendingCount = upcoming.filter(b => b.status === "pending").length;
 
@@ -89,15 +92,21 @@ function MyBookingsContent() {
 
       {/* Tabs */}
       <Tabs defaultValue="upcoming" className="w-full space-y-8">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-200/50 p-1 rounded-xl">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-200/50 p-1 rounded-xl">
           <TabsTrigger value="upcoming">
             Upcoming <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{upcoming.length}</span>
           </TabsTrigger>
-          <TabsTrigger value="past">
-            Past <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{past.length}</span>
+          <TabsTrigger value="completed">
+            Completed <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{completed.length}</span>
           </TabsTrigger>
           <TabsTrigger value="cancelled">
             Cancelled <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{cancelled.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="expired">
+            Expired <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{expired.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="rejected">
+            Rejected <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded-full text-xs font-semibold hidden sm:inline-block">{rejected.length}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -110,9 +119,9 @@ function MyBookingsContent() {
           />
         </TabsContent>
 
-        <TabsContent value="past" className="outline-none">
+        <TabsContent value="completed" className="outline-none">
           <BookingList
-            list={past}
+            list={completed}
             allowCancel={false}
             isPast={true}
             emptyMessage="You haven't completed any trips yet."
@@ -125,6 +134,24 @@ function MyBookingsContent() {
             list={cancelled}
             allowCancel={false}
             emptyMessage="No cancelled or refunded bookings found."
+            emptyIcon={<AlertCircle className="w-10 h-10 text-slate-300" />}
+          />
+        </TabsContent>
+
+        <TabsContent value="expired" className="outline-none">
+          <BookingList
+            list={expired}
+            allowCancel={false}
+            emptyMessage="No expired bookings found."
+            emptyIcon={<AlertCircle className="w-10 h-10 text-slate-300" />}
+          />
+        </TabsContent>
+
+        <TabsContent value="rejected" className="outline-none">
+          <BookingList
+            list={rejected}
+            allowCancel={false}
+            emptyMessage="No rejected bookings found."
             emptyIcon={<AlertCircle className="w-10 h-10 text-slate-300" />}
           />
         </TabsContent>

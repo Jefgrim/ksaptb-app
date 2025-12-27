@@ -26,6 +26,9 @@ export default defineSchema({
     // This allows the Cron job to mark a tour as "finished"
     // so it becomes read-only and unbookable.
     isCompleted: v.optional(v.boolean()), 
+
+    // Transfer instructions
+    transferInstructions: v.optional(v.string()),
   }),
 
   bookings: defineTable({
