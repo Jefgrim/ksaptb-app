@@ -22,11 +22,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-// 1. IMPORT THE QR LIBRARY
 import QRCode from "react-qr-code"; 
 import { 
   CalendarDays, MapPin, Users, Wallet, Clock, XCircle, 
-  CheckCircle2, QrCode as QrIcon, ArrowRight, AlertTriangle, RefreshCcw, ExternalLink, AlertCircle 
+  CheckCircle2, QrCode as QrIcon, ArrowRight, AlertTriangle, RefreshCcw, ExternalLink, AlertCircle, ChevronLeft, ChevronRight
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -38,6 +37,7 @@ interface BookingCardProps {
 }
 
 export function BookingCard({ booking, onCancel, isPast = false }: BookingCardProps) {
+  const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
   
   const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
     holding:   { label: "Payment Needed", color: "bg-amber-100 text-amber-800 border-amber-200", icon: AlertTriangle },
@@ -61,6 +61,72 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
   const totalPaid = rawTotal / 100;
   const refId = booking._id.slice(-6).toUpperCase();
   const isRefunded = booking.status === "refunded";
+
+  const QrDialogContent = () => {
+    const totalTickets = booking.ticketCount;
+    // The unique value for the QR code, e.g., "bookingId-1", "bookingId-2"
+    const ticketId = `${booking._id}-${currentTicketIndex + 1}`;
+
+    const handleNext = () => {
+      if (currentTicketIndex < totalTickets - 1) {
+        setCurrentTicketIndex(currentTicketIndex + 1);
+      }
+    };
+
+    const handlePrev = () => {
+      if (currentTicketIndex > 0) {
+        setCurrentTicketIndex(currentTicketIndex - 1);
+      }
+    };
+
+    return (
+      <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+              <DialogTitle className="text-center pb-2 border-b border-slate-100">
+                  Your Digital Ticket
+              </DialogTitle>
+          </DialogHeader>
+          
+          <div className="p-4 text-center space-y-4">
+              <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+                  <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                  <h3 className="text-lg font-bold text-slate-900">{booking.tourTitle}</h3>
+                  <p className="text-slate-500 text-sm">Scan this code at the venue entrance.</p>
+              </div>
+              
+              <div className="flex justify-center p-4">
+                  <div className="border border-slate-200 p-4 rounded-lg bg-white inline-block">
+                      <QRCode 
+                        size={150} 
+                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                        value={ticketId} // Encode unique ticket ID
+                        viewBox={`0 0 256 256`}
+                      />
+                  </div>
+              </div>
+
+              {/* --- Ticket Navigator --- */}
+              {booking.ticketCount > 1 && (
+                 <div className="flex items-center justify-center gap-4">
+                    <Button onClick={handlePrev} disabled={currentTicketIndex === 0} variant="outline" size="icon" className="h-8 w-8">
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="text-sm font-bold text-slate-800">
+                        Ticket {currentTicketIndex + 1} of {booking.ticketCount}
+                    </div>
+                    <Button onClick={handleNext} disabled={currentTicketIndex === booking.ticketCount - 1} variant="outline" size="icon" className="h-8 w-8">
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+              )}
+              
+              <p className="text-[10px] text-slate-400">Ref: {refId}</p>
+          </div>
+      </DialogContent>
+    )
+  }
 
   return (
     <Card className="group overflow-hidden border border-slate-200 bg-white hover:shadow-lg transition-all duration-300 mb-4">
@@ -228,43 +294,14 @@ export function BookingCard({ booking, onCancel, isPast = false }: BookingCardPr
                 )}
 
                 {booking.status === "confirmed" && (
-                      <Dialog>
+                    <Dialog onOpenChange={(isOpen) => !isOpen && setCurrentTicketIndex(0)}>
                         <DialogTrigger asChild>
                             <Button variant="outline" className="w-full md:w-auto border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700">
-                                <QrIcon className="w-4 h-4 mr-2" /> View Ticket
+                                <QrIcon className="w-4 h-4 mr-2" />
+                                View {booking.ticketCount > 1 ? "Tickets" : "Ticket"}
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-md">
-                            <DialogHeader>
-                                <DialogTitle className="text-center pb-2 border-b border-slate-100">
-                                    Your Digital Ticket
-                                </DialogTitle>
-                            </DialogHeader>
-                            
-                            <div className="p-4 text-center space-y-4">
-                                <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-                                    <CheckCircle2 className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900">{booking.tourTitle}</h3>
-                                    <p className="text-slate-500 text-sm">Scan this code at the venue entrance.</p>
-                                </div>
-                                
-                                {/* --- 2. REAL QR CODE GENERATED HERE --- */}
-                                <div className="flex justify-center p-4">
-                                    <div className="border border-slate-200 p-4 rounded-lg bg-white inline-block">
-                                        <QRCode 
-                                          size={150} 
-                                          style={{ height: "auto", maxWidth: "100%", width: "100%" }}
-                                          value={booking._id} // Encodes the Booking ID
-                                          viewBox={`0 0 256 256`}
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <p className="text-[10px] text-slate-400">Ref: {refId}</p>
-                            </div>
-                        </DialogContent>
+                        <QrDialogContent />
                     </Dialog>
                 )}
 
