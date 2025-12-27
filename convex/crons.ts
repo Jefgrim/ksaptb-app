@@ -9,4 +9,10 @@ crons.interval(
   internal.bookings.cleanupExpired
 );
 
+crons.interval(
+  "mark-tours-completed",
+  { hours: 1 }, // Runs hourly to check if start date has passed
+  internal.tours.checkAndMarkCompleted
+);
+
 export default crons;

@@ -49,23 +49,33 @@ export const getMyBookings = query({
     const bookings = await ctx.db
       .query("bookings")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc") // Recommended: Newest first
       .collect();
 
-    const bookingsWithTour = await Promise.all(
+    const bookingsWithDetails = await Promise.all(
       bookings.map(async (booking) => {
+        // 1. Get Tour Details & Cover Image
         const tour = await ctx.db.get(booking.tourId);
         let imageUrl = null;
         if (tour && tour.coverImageId) {
           imageUrl = await ctx.storage.getUrl(tour.coverImageId);
         }
+
+        // 2. Get Admin Refund Proof URL (CRITICAL FIX)
+        let adminRefundProofUrl = null;
+        if (booking.adminRefundProofId) {
+          adminRefundProofUrl = await ctx.storage.getUrl(booking.adminRefundProofId);
+        }
+
         return {
           ...booking,
+          adminRefundProofUrl, // <--- Passing this to the frontend now
           tour: tour ? { ...tour, imageUrl } : null
         };
       })
     );
 
-    return bookingsWithTour;
+    return bookingsWithDetails;
   },
 });
 

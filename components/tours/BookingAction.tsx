@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
-import { useMutation, useQuery, useAction } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Id } from "@/convex/_generated/dataModel";
-// Added "Lock" icon
 import { Loader2, Landmark, Upload, Info, Timer, X, ArrowLeft, Phone, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
@@ -61,9 +60,10 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
   const fileInput = useRef<HTMLInputElement>(null);
 
   const remaining = capacity - bookedCount;
+  // Dynamic price calculation
   const displayPrice = (price * (step === "payment" && activeHolding ? activeHolding.ticketCount : ticketCount) / 100);
 
-  // --- EFFECTS ---
+  // --- EFFECT: SYNC WITH SERVER STATE ---
   useEffect(() => {
     if (activeHolding) {
         setBookingId(activeHolding._id);
@@ -73,15 +73,28 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
     }
   }, [activeHolding]);
 
+  // --- EFFECT: TIMER & AUTO-EXPIRATION ---
   useEffect(() => {
     if (!expiresAt) return;
+
     const tick = () => {
         const diff = expiresAt - Date.now();
+        
         if (diff <= 0) {
-            setTimeLeft("Expired");
-            if(step === "payment") {
-                toast.error("Reservation expired");
-                window.location.reload();
+            setTimeLeft("00:00");
+            
+            // FIX: If timer runs out, reset state instead of reloading
+            if (step === "payment" && bookingId) {
+                // 1. Reset UI locally immediately
+                setExpiresAt(null);
+                setStep("details");
+                setBookingId(null);
+                
+                // 2. Tell backend to cancel/expire it (Cleaning up DB)
+                // We use .catch() to ignore errors if it was already cleaned up by Cron
+                cancelBooking({ bookingId }).catch(() => {});
+                
+                toast.error("Reservation time expired. Spot released.");
             }
         } else {
             const m = Math.floor(diff / 60000);
@@ -89,10 +102,11 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
             setTimeLeft(`${m}:${s < 10 ? '0' : ''}${s}`);
         }
     };
+
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [expiresAt, step]);
+  }, [expiresAt, step, bookingId, cancelBooking]);
 
   // --- HANDLERS ---
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,7 +189,16 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
         toast.success("Booking submitted!");
         router.push("/my-bookings"); 
     } catch (error: any) {
-        toast.error(error.data?.message || "Something went wrong");
+        const msg = error.data?.message || "Something went wrong";
+        toast.error(msg);
+        
+        // FIX: If backend says it's expired during confirm, force reset
+        if (msg.toLowerCase().includes("expired")) {
+            setStep("details");
+            setBookingId(null);
+            setExpiresAt(null);
+        }
+    } finally {
         setIsProcessing(false);
     }
   };
@@ -193,7 +216,6 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
   if (!isSignedIn) {
     return (
         <Card className="shadow-lg border-slate-200 sticky top-4 overflow-hidden">
-           {/* Header is kept generic */}
            <CardHeader className="bg-slate-50 border-b pb-4">
               <CardTitle>Tour Details</CardTitle>
               <CardDescription>{formatDate(startDate)}</CardDescription>
@@ -207,7 +229,7 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
               <div className="space-y-2">
                  <h3 className="text-lg font-bold text-slate-900">Members Only Access</h3>
                  <p className="text-sm text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                    Sign in to view the <strong className="text-slate-700">price</strong>, <strong className="text-slate-700">available spots</strong>, and to book your ticket.
+                   Sign in to view the <strong className="text-slate-700">price</strong>, <strong className="text-slate-700">available spots</strong>, and to book your ticket.
                  </p>
               </div>
 
@@ -243,7 +265,11 @@ export function BookingAction({ tourId, price, capacity, bookedCount, startDate 
                 </CardDescription>
             </div>
             {step === "payment" && (
-                <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-sm font-mono font-bold border border-amber-200">
+                <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-mono font-bold border transition-colors ${
+                    timeLeft === "00:00" 
+                    ? "bg-red-50 text-red-600 border-red-200" 
+                    : "bg-amber-50 text-amber-600 border-amber-200"
+                }`}>
                     <Timer className="w-4 h-4" />
                     {timeLeft}
                 </div>

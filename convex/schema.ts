@@ -18,8 +18,14 @@ export default defineSchema({
     bookedCount: v.number(),
     coverImageId: v.optional(v.id("_storage")),
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
-    // NEW: Track if tour is cancelled by admin
+    
+    // Track if tour is cancelled by admin
     cancelled: v.optional(v.boolean()), 
+    
+    // --- NEW FIELD ---
+    // This allows the Cron job to mark a tour as "finished"
+    // so it becomes read-only and unbookable.
+    isCompleted: v.optional(v.boolean()), 
   }),
 
   bookings: defineTable({
@@ -45,16 +51,15 @@ export default defineSchema({
     ),
 
     paymentMethod: v.union(v.literal("stripe"), v.literal("transfer")),
-    // NEW: "expired" is now a valid payment status
     paymentStatus: v.string(), 
 
     // User inputs
     proofImageId: v.optional(v.id("_storage")),
     refundDetails: v.optional(v.string()), 
-    contactNumber: v.optional(v.string()), // NEW: User contact info
+    contactNumber: v.optional(v.string()), 
 
     // Admin Refund Logic (For Cancelled Tours)
-    adminRefundProofId: v.optional(v.id("_storage")), // NEW
+    adminRefundProofId: v.optional(v.id("_storage")), 
     
     expiresAt: v.optional(v.number()),
     redeemedTickets: v.optional(v.array(v.number())),

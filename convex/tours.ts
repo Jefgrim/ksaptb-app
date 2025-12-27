@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireAdmin, requireUser } from "./auth";
 
@@ -28,12 +28,17 @@ export const list = query({
           .collect();
 
         // STRICT CHECK: Returns true if any booking is "holding", "pending", or payment is "reviewing"
-        const hasPendingBookings = bookings.some(b => 
-          b.status === "pending" || 
-          b.status === "holding" || 
+        const hasPendingBookings = bookings.some(b =>
+          b.status === "pending" ||
+          b.status === "holding" ||
           b.paymentStatus === "reviewing" ||
           b.paymentStatus === "pending"
         );
+
+        // Calculate Revenue for "Analytics" view
+        const confirmedBookings = bookings.filter(b => b.status === "confirmed");
+        const totalRevenue = confirmedBookings.reduce((sum, b) => sum + (b.ticketCount * b.tourPrice), 0);
+        const uniqueParticipants = confirmedBookings.length; // Total booking orders
 
         return {
           ...tour,
@@ -41,6 +46,11 @@ export const list = query({
             ? await ctx.storage.getUrl(tour.coverImageId)
             : null,
           hasPendingBookings, // Boolean flag for Frontend
+          analytics: {
+            totalRevenue,
+            uniqueParticipants,
+            totalTicketsSold: tour.bookedCount
+          }
         };
       })
     );
@@ -51,10 +61,10 @@ export const list = query({
 export const listUpcoming = query({
   handler: async (ctx) => {
     const tours = await ctx.db.query("tours").collect();
-    const now = Date.now();
+    const now = getKsaToday();
 
     // FILTER: Start Date must be in the future AND not cancelled
-    const upcomingTours = tours.filter(tour => 
+    const upcomingTours = tours.filter(tour =>
       tour.startDate >= now && !tour.cancelled
     );
 
@@ -142,8 +152,8 @@ export const book = mutation({
       throw new ConvexError("This tour has been cancelled and cannot be booked.");
     }
 
-    if (tour.startDate < Date.now()) {
-      throw new ConvexError("This tour has already started or ended.");
+    if (tour.isCompleted || tour.startDate < getKsaToday()) {
+      throw new ConvexError("This tour has finished and is no longer accepting bookings.");
     }
 
     if (tour.bookedCount + args.ticketCount > tour.capacity) {
@@ -223,6 +233,15 @@ export const update = mutation({
     const tour = await ctx.db.get(id);
     if (!tour) throw new ConvexError("Tour not found");
 
+    if (tour.isCompleted) {
+      throw new ConvexError("Cannot edit a completed/past tour. It is read-only.");
+    }
+
+    if (fields.startDate) {
+      const ksaToday = getKsaToday();
+      if (fields.startDate < ksaToday) throw new ConvexError("Cannot move tour to past.");
+    }
+
     if (fields.startDate) {
       const ksaToday = getKsaToday();
       if (fields.startDate < ksaToday) {
@@ -255,6 +274,11 @@ export const cancelTour = mutation({
     await requireAdmin(ctx);
 
     const tour = await ctx.db.get(args.id);
+
+    if (tour?.isCompleted) {
+      throw new ConvexError("Cannot cancel a tour that has already finished.");
+    }
+
     if (!tour) throw new ConvexError("Tour not found");
 
     // Fetch all bookings for this tour
@@ -265,8 +289,8 @@ export const cancelTour = mutation({
 
     // STRICT VALIDATION: Check for any incomplete status
     const hasPending = bookings.some(b =>
-      b.status === "pending" || 
-      b.status === "holding" || 
+      b.status === "pending" ||
+      b.status === "holding" ||
       b.paymentStatus === "reviewing" ||
       b.paymentStatus === "pending"
     );
@@ -279,5 +303,27 @@ export const cancelTour = mutation({
     await ctx.db.patch(args.id, {
       cancelled: true,
     });
+  },
+});
+
+
+export const checkAndMarkCompleted = internalMutation({
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    // Find tours that are in the past but NOT marked completed yet
+    const toursToClose = await ctx.db
+      .query("tours")
+      .filter((q) =>
+        q.and(
+          q.lt(q.field("startDate"), now),
+          q.neq(q.field("isCompleted"), true)
+        )
+      )
+      .collect();
+
+    for (const tour of toursToClose) {
+      await ctx.db.patch(tour._id, { isCompleted: true });
+    }
   },
 });
