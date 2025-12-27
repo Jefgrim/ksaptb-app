@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -37,10 +37,8 @@ export default function Home() {
       {/* --- NAVBAR --- */}
       <nav className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 p-1.5 rounded-lg">
-              <MapPin className="h-5 w-5 text-white" />
-            </div>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="KSA Pinoy Travel Buddies Logo" className="h-25 w-auto" />
             <h1 className="text-xl font-bold tracking-tight text-slate-900 hidden md:block">
               KSA Pinoy Travel Buddies
             </h1>
