@@ -196,6 +196,8 @@ export const confirm = mutation({
       proofImageId: args.proofImageId,
       refundDetails: args.refundDetails,
       contactNumber: args.contactNumber,
+      isAdminNotified: false,
+      isUserNotified: true,
     });
   }
 });
@@ -242,6 +244,8 @@ export const verifyPayment = mutation({
       await ctx.db.patch(args.bookingId, {
         status: "confirmed",
         paymentStatus: "paid",
+        isUserNotified: false,
+        isAdminNotified: true,
       });
     } else {
       const tour = await ctx.db.get(booking.tourId);
@@ -254,6 +258,8 @@ export const verifyPayment = mutation({
       await ctx.db.patch(args.bookingId, {
         status: "rejected",
         paymentStatus: "rejected",
+        isUserNotified: false,
+        isAdminNotified: true,
       });
     }
   }

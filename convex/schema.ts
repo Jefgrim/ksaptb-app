@@ -1,3 +1,4 @@
+
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -73,6 +74,10 @@ export default defineSchema({
     // Downpayment Logic
     paymentType: v.optional(v.union(v.literal("full"), v.literal("downpayment"))),
     isSecondPaymentConfirmed: v.optional(v.boolean()),
+
+    // Notification fields
+    isUserNotified: v.optional(v.boolean()),
+    isAdminNotified: v.optional(v.boolean()),
   })
     .index("by_tour", ["tourId"])
     .index("by_user", ["userId"])
