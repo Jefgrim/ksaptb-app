@@ -62,6 +62,7 @@ export const sendUserNotification = internalMutation({
               <li>Status: ${booking.status}</li>
             </ul>
             <p>You can view your booking details in your account.</p>
+            <p>This is an automated message DO NOT REPLY</p>
           `
         });
         await ctx.db.patch(booking._id, { isUserNotified: true });

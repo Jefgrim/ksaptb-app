@@ -11,7 +11,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 // IMPORTANT: You must also verify your sending domain with Resend.
 // You can set the RESEND_FROM_EMAIL environment variable.
 // By default, it uses "onboarding@resend.dev" for testing.
-const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "KSA PTB <onboarding@resend.dev>";
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "KSA PTB (DO NOT REPLY) <onboarding@resend.dev>";
 
 export const send = internalAction({
   args: { 
