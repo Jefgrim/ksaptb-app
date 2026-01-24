@@ -114,6 +114,8 @@ export const create = mutation({
     capacity: v.number(),
     coverImageId: v.optional(v.id("_storage")),
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
+    transferInstructions: v.optional(v.string()),
+    paymentOption: v.union(v.literal("full"), v.literal("downpayment")),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -225,6 +227,8 @@ export const update = mutation({
     startDate: v.optional(v.number()),
     coverImageId: v.optional(v.id("_storage")),
     galleryImageIds: v.optional(v.array(v.id("_storage"))),
+    transferInstructions: v.optional(v.string()),
+    paymentOption: v.optional(v.union(v.literal("full"), v.literal("downpayment"))),
   },
   handler: async (ctx, args) => {
     const { id, ...fields } = args;

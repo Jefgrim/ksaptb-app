@@ -14,26 +14,18 @@ export const getBookingsByTour = query({
       .withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
       .collect();
 
-    // Map over bookings to generate URLs
     return Promise.all(
       bookings.map(async (b) => {
         let proofUrl = null;
-        // If there is a proofImageId (Admin Refund) or paymentImageId (User Payment)
-        // You might want to return URLs for both
         if (b.proofImageId) {
           proofUrl = await ctx.storage.getUrl(b.proofImageId);
         }
-
-        return {
-          ...b,
-          proofUrl, // <--- This is what the UI uses
-        };
+        return { ...b, proofUrl };
       })
     );
   },
 });
 
-// 1. Get My Bookings (Standard)
 export const getMyBookings = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -49,19 +41,17 @@ export const getMyBookings = query({
     const bookings = await ctx.db
       .query("bookings")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .order("desc") // Recommended: Newest first
+      .order("desc")
       .collect();
 
     const bookingsWithDetails = await Promise.all(
       bookings.map(async (booking) => {
-        // 1. Get Tour Details & Cover Image
         const tour = await ctx.db.get(booking.tourId);
         let imageUrl = null;
         if (tour && tour.coverImageId) {
           imageUrl = await ctx.storage.getUrl(tour.coverImageId);
         }
 
-        // 2. Get Admin Refund Proof URL (CRITICAL FIX)
         let adminRefundProofUrl = null;
         if (booking.adminRefundProofId) {
           adminRefundProofUrl = await ctx.storage.getUrl(booking.adminRefundProofId);
@@ -69,7 +59,7 @@ export const getMyBookings = query({
 
         return {
           ...booking,
-          adminRefundProofUrl, // <--- Passing this to the frontend now
+          adminRefundProofUrl,
           tour: tour ? { ...tour, imageUrl } : null
         };
       })
@@ -79,14 +69,12 @@ export const getMyBookings = query({
   },
 });
 
-// 2. Get Active Holding (For RESUMING a session)
 export const getMyActiveHolding = query({
   args: { tourId: v.id("tours") },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const now = Date.now();
 
-    // Find a booking for this user + tour that is "holding" and NOT expired
     const holding = await ctx.db
       .query("bookings")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -94,20 +82,18 @@ export const getMyActiveHolding = query({
         q.and(
           q.eq(q.field("tourId"), args.tourId),
           q.eq(q.field("status"), "holding"),
-          q.gt(q.field("expiresAt"), now) // Must still have time left
+          q.gt(q.field("expiresAt"), now)
         )
       )
       .first();
 
-    return holding; // Returns null if no active session
+    return holding;
   }
 });
 
-// 3. Admin Queries (Keep existing)
 export const getAllBookings = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
-
     const bookings = await ctx.db.query("bookings").order("desc").collect();
     return bookings.map((b) => ({
       _id: b._id,
@@ -118,6 +104,7 @@ export const getAllBookings = query({
       userEmail: b.userEmail,
       tourTitle: b.tourTitle,
       tourDate: b.tourDate,
+      // Returns TOTAL CENTS
       totalPrice: (b.tourPrice * (b.ticketCount ?? 1)),
     }));
   },
@@ -139,7 +126,6 @@ export const getBookingForAdmin = query({
 // MUTATIONS
 // --------------------------------------------------------------------------
 
-// 4. RESERVE (Step 1: Lock the spot)
 export const reserve = mutation({
   args: {
     tourId: v.id("tours"),
@@ -150,18 +136,14 @@ export const reserve = mutation({
     const tour = await ctx.db.get(args.tourId);
     if (!tour) throw new ConvexError("Tour not found");
 
-    // Check Capacity
     if (tour.bookedCount + args.ticketCount > tour.capacity) {
       throw new ConvexError("Sold out");
     }
 
-    // 1. LOCK SEATS
     await ctx.db.patch(tour._id, {
       bookedCount: tour.bookedCount + args.ticketCount,
     });
 
-    // 2. CREATE "HOLDING" BOOKING
-    // 15 Minutes Expiration
     const EXPIRE_TIME = 15 * 60 * 1000;
 
     const bookingId = await ctx.db.insert("bookings", {
@@ -172,35 +154,32 @@ export const reserve = mutation({
       userEmail: user.email,
       tourTitle: tour.title,
       tourDate: tour.startDate,
-      tourPrice: tour.price,
-
+      tourPrice: tour.price, // Stored in Cents
       status: "holding",
       expiresAt: Date.now() + EXPIRE_TIME,
-
-      // Defaults until they finish Step 2
       paymentMethod: "transfer",
       paymentStatus: "pending",
+      paymentType: tour.paymentOption || "full",
+      isSecondPaymentConfirmed: false,
     });
 
     return { bookingId, expiresAt: Date.now() + EXPIRE_TIME };
   },
 });
 
-// 5. CONFIRM (Step 2: Finalize)
 export const confirm = mutation({
   args: {
     bookingId: v.id("bookings"),
     paymentMethod: v.union(v.literal("stripe"), v.literal("transfer")),
     proofImageId: v.optional(v.id("_storage")),
     refundDetails: v.optional(v.string()),
-    contactNumber: v.string(), // NEW: Required
+    contactNumber: v.string(),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const booking = await ctx.db.get(args.bookingId);
 
     if (!booking || booking.userId !== user._id) throw new ConvexError("Unauthorized");
-
     if (booking.status === "expired") {
       throw new ConvexError("Reservation expired. Please book again.");
     }
@@ -216,12 +195,13 @@ export const confirm = mutation({
       paymentStatus: paymentStatus,
       proofImageId: args.proofImageId,
       refundDetails: args.refundDetails,
-      contactNumber: args.contactNumber, // Saved
+      contactNumber: args.contactNumber,
+      isAdminNotified: false,
+      isUserNotified: true,
     });
   }
 });
 
-// 6. CLEANUP (Cron Job)
 export const cleanupExpired = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -233,7 +213,6 @@ export const cleanupExpired = internalMutation({
       .collect();
 
     for (const booking of expiredBookings) {
-      // NEW: Mark both booking status AND payment status as expired
       await ctx.db.patch(booking._id, {
         status: "expired",
         paymentStatus: "expired"
@@ -249,7 +228,6 @@ export const cleanupExpired = internalMutation({
   }
 });
 
-// 7. Verify Payment (Admin)
 export const verifyPayment = mutation({
   args: { bookingId: v.id("bookings"), action: v.union(v.literal("approve"), v.literal("reject")) },
   handler: async (ctx, args) => {
@@ -258,7 +236,6 @@ export const verifyPayment = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking not found");
 
-    // SAFETY CHECK: Prevent double processing
     if (booking.paymentStatus === "paid" || booking.paymentStatus === "rejected") {
       throw new ConvexError(`This booking has already been ${booking.paymentStatus}.`);
     }
@@ -267,12 +244,11 @@ export const verifyPayment = mutation({
       await ctx.db.patch(args.bookingId, {
         status: "confirmed",
         paymentStatus: "paid",
+        isUserNotified: false,
+        isAdminNotified: true,
       });
     } else {
-      // If rejected, free the seats
       const tour = await ctx.db.get(booking.tourId);
-
-      // Only return seats if the booking wasn't already rejected
       if (tour && booking.status !== "rejected") {
         await ctx.db.patch(tour._id, {
           bookedCount: Math.max(0, tour.bookedCount - booking.ticketCount)
@@ -282,12 +258,13 @@ export const verifyPayment = mutation({
       await ctx.db.patch(args.bookingId, {
         status: "rejected",
         paymentStatus: "rejected",
+        isUserNotified: false,
+        isAdminNotified: true,
       });
     }
   }
 });
 
-// 8. Cancel Booking (User)
 export const cancelBooking = mutation({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
@@ -310,12 +287,11 @@ export const cancelBooking = mutation({
 });
 
 // --------------------------------------------------------------------------
-// 9. SCAN TICKET (New)
+// 9. SCAN TICKET (SINGLE QR & PAYMENT LOGIC)
 // --------------------------------------------------------------------------
 export const validateTicket = mutation({
   args: {
     bookingId: v.id("bookings"),
-    ticketNumber: v.number()
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -323,46 +299,79 @@ export const validateTicket = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking ID not found");
 
-    // 1. Check if Booking is Valid
+    // 1. Check Status
     if (booking.status !== "confirmed") {
       return {
         valid: false,
         message: `Booking is ${booking.status.toUpperCase()}`,
-        booking
+        booking,
       };
     }
 
-    // 2. Check if Ticket Number exists in this booking (e.g. Booking has 2 tix, scanning Ticket #99)
-    if (args.ticketNumber < 1 || args.ticketNumber > booking.ticketCount) {
+    // 2. Check if ALREADY Checked In
+    if (booking.checkedInAt) {
       return {
         valid: false,
-        message: "Invalid Ticket Number",
-        booking
-      };
-    }
-
-    // 3. Check if ALREADY redeemed
-    const redeemed = booking.redeemedTickets || [];
-    if (redeemed.includes(args.ticketNumber)) {
-      return {
-        valid: false,
-        message: "ALREADY REDEEMED",
+        message: "ALREADY USED",
         alreadyRedeemed: true,
-        booking
+        booking,
       };
     }
 
-    // 4. Success: Mark as redeemed
+    // 3. Check Payment Status (Downpayment)
+    if (
+      booking.paymentType === "downpayment" &&
+      !booking.isSecondPaymentConfirmed
+    ) {
+      // CALCULATION (In Cents)
+      // Example: tourPrice 5000 (50 SAR) * 2 tickets = 10000 cents (100 SAR)
+      const totalAmountCents = booking.tourPrice * booking.ticketCount;
+      const remainingBalanceCents = totalAmountCents / 2;
+
+      return {
+        valid: false,
+        message: "Second Payment Required",
+        requiresSecondPayment: true,
+        remainingBalance: remainingBalanceCents, // Returns CENTS
+        booking,
+      };
+    }
+
+    // 4. Success: Mark whole group as Checked In
     await ctx.db.patch(args.bookingId, {
-      redeemedTickets: [...redeemed, args.ticketNumber]
+      checkedInAt: Date.now(),
     });
 
     return {
       valid: true,
       message: "Access Granted",
-      booking
+      booking,
     };
-  }
+  },
+});
+
+export const confirmSecondPayment = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) throw new ConvexError("Booking not found");
+
+    if (booking.paymentType !== "downpayment") {
+      throw new ConvexError("This is not a downpayment booking.");
+    }
+
+    // Mark payment confirmed AND check them in immediately
+    await ctx.db.patch(args.bookingId, {
+      isSecondPaymentConfirmed: true,
+      checkedInAt: Date.now(),
+    });
+
+    return { success: true };
+  },
 });
 
 export const processAdminRefund = mutation({
@@ -376,11 +385,10 @@ export const processAdminRefund = mutation({
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) throw new ConvexError("Booking not found");
 
-    // Update status to 'refunded'
     await ctx.db.patch(args.bookingId, {
       status: "refunded",
       paymentStatus: "refunded",
-      adminRefundProofId: args.proofImageId
+      adminRefundProofId: args.proofImageId,
     });
-  }
+  },
 });
